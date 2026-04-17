@@ -1,101 +1,167 @@
 # ============================================================
-# Tidepool — Terminal Renderer (Pure EigenScript)
+# Tidepool — SDL2 Graphical Renderer
 # ============================================================
-# Builds screen as a list of strings, joins once, writes once.
-# No C rendering builtins — uses only join, write, flush.
+# Draws the game world using gfx_* builtins.
 
 load_file of "src/constants.eigs"
+load_file of "src/math_utils.eigs"
 
-ESC is chr of 27
+# Rendering constants
+PIXELS_PER_UNIT is 20
+HUD_HEIGHT is 60
+
+# Color palette
+BG_R is 8
+BG_G is 16
+BG_B is 32
 
 # ============================================================
-# Render game state to terminal
+# World-to-screen coordinate conversion
+# ============================================================
+
+define world_to_screen(wx, wy, cam_x, cam_y, screen_w, screen_h) as:
+    dx is torus_delta of [cam_x, wx, 0]
+    dy is torus_delta of [cam_y, wy, 0]
+    sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
+    sy is floor of (screen_h / 2 + dy * PIXELS_PER_UNIT)
+    return [sx, sy]
+
+# ============================================================
+# Draw a creature body (simplified)
+# ============================================================
+
+define draw_creature(sx, sy, angle, radius, r, g, b) as:
+    px_radius is floor of (radius * PIXELS_PER_UNIT)
+    if px_radius < 3:
+        px_radius is 3
+
+    # Body circle
+    gfx_circle of [sx, sy, px_radius, r, g, b]
+
+    # Direction indicator (line from center forward)
+    fx is cos of angle
+    fy is sin of angle
+    tip_x is floor of (sx + fx * px_radius * 1.3)
+    tip_y is floor of (sy + fy * px_radius * 1.3)
+    gfx_line of [sx, sy, tip_x, tip_y, 255, 255, 255]
+
+# ============================================================
+# Main render function
 # ============================================================
 
 define render_game(game, screen_w, screen_h) as:
-    # View window centered on player
-    view_w is screen_w * 0.5
-    view_h is screen_h * 0.5
-    half_vw is view_w / 2.0
-    half_vh is view_h / 2.0
+    game_h is screen_h - HUD_HEIGHT
 
-    # Build flat screen buffer
-    buf_size is screen_w * screen_h
-    buf is []
-    buf_colors is []
-    for i in range of buf_size:
-        append of [buf, " "]
-        append of [buf_colors, 0]
+    # Camera follows player
+    cam_x is game.px
+    cam_y is game.py
 
-    # Project entity to screen index
-    define project(wx, wy) as:
-        dx is torus_delta of [game.px, wx, game.world_w]
-        dy is torus_delta of [game.py, wy, game.world_h]
-        col is floor of ((dx + half_vw) / view_w * screen_w)
-        row is floor of ((dy + half_vh) / view_h * screen_h)
-        if col >= 0:
-            if col < screen_w:
-                if row >= 0:
-                    if row < screen_h:
-                        return row * screen_w + col
-        return -1
+    # Clear
+    gfx_clear of [BG_R, BG_G, BG_B]
 
-    # Project food
+    # Water current visualization (subtle lines)
+    cx_dir is cos of game.current_angle
+    cy_dir is sin of game.current_angle
+    for i in range of 12:
+        wx is cam_x + (i - 6) * 3.0
+        wy is cam_y + (sin of (wx * 0.3 + game.tick * 0.01)) * 5.0
+        pos is world_to_screen of [wx, wy, cam_x, cam_y, screen_w, game_h]
+        if pos[0] > 0:
+            if pos[0] < screen_w:
+                if pos[1] > 0:
+                    if pos[1] < game_h:
+                        ex is floor of (pos[0] + cx_dir * 15)
+                        ey is floor of (pos[1] + cy_dir * 15)
+                        gfx_line of [pos[0], pos[1], ex, ey, 20, 35, 55]
+
+    # Draw food
     for i in range of (len of game.food):
         f is game.food[i]
         if f.active == 1:
-            idx is project of [f.px, f.py]
-            if idx >= 0:
-                set_at of [buf, idx, "."]
-                set_at of [buf_colors, idx, 32]
+            dx is torus_delta of [cam_x, f.px, game.world_w]
+            dy is torus_delta of [cam_y, f.py, game.world_h]
+            sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
+            sy is floor of (game_h / 2 + dy * PIXELS_PER_UNIT)
+            if sx > -10:
+                if sx < screen_w + 10:
+                    if sy > -10:
+                        if sy < game_h + 10:
+                            gfx_circle of [sx, sy, 4, 60, 200, 60]
 
-    # Project predators
-    for i in range of (len of game.predators):
-        p is game.predators[i]
-        if p.active == 1:
-            idx is project of [p.px, p.py]
-            if idx >= 0:
-                set_at of [buf, idx, "X"]
-                set_at of [buf_colors, idx, 31]
-
-    # Project meat
+    # Draw meat
     for i in range of (len of game.meat):
         m is game.meat[i]
         if m.active == 1:
-            idx is project of [m.px, m.py]
-            if idx >= 0:
-                set_at of [buf, idx, "m"]
-                set_at of [buf_colors, idx, 35]
+            dx is torus_delta of [cam_x, m.px, game.world_w]
+            dy is torus_delta of [cam_y, m.py, game.world_h]
+            sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
+            sy is floor of (game_h / 2 + dy * PIXELS_PER_UNIT)
+            if sx > -10:
+                if sx < screen_w + 10:
+                    if sy > -10:
+                        if sy < game_h + 10:
+                            gfx_circle of [sx, sy, 5, 180, 60, 60]
 
-    # Player at center
-    center is floor of (screen_h / 2) * screen_w + floor of (screen_w / 2)
-    set_at of [buf, center, "@"]
-    set_at of [buf_colors, center, 37]
+    # Draw predators
+    for i in range of (len of game.predators):
+        p is game.predators[i]
+        if p.active == 1:
+            dx is torus_delta of [cam_x, p.px, game.world_w]
+            dy is torus_delta of [cam_y, p.py, game.world_h]
+            sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
+            sy is floor of (game_h / 2 + dy * PIXELS_PER_UNIT)
+            if sx > -20:
+                if sx < screen_w + 20:
+                    if sy > -20:
+                        if sy < game_h + 20:
+                            draw_creature of [sx, sy, p.angle, p.radius, 200, 50, 50]
 
-    # Build output as list of fragments, join once
-    parts is []
-    append of [parts, f"{ESC}[H"]
-    prev_color is 0
-    for row in range of screen_h:
-        for col in range of screen_w:
-            idx is row * screen_w + col
-            c is buf_colors[idx]
-            if c != prev_color:
-                if c > 0:
-                    append of [parts, f"{ESC}[{c}m"]
-                else:
-                    append of [parts, f"{ESC}[0m"]
-                prev_color is c
-            append of [parts, buf[idx]]
-        append of [parts, "\n"]
+    # Draw player
+    p_sx is floor of (screen_w / 2)
+    p_sy is floor of (game_h / 2)
+    p_rad is player_radius of game
+    draw_creature of [p_sx, p_sy, game.angle, p_rad + 0.3, 100, 200, 255]
 
-    # HUD
-    status is game_status of game
-    append of [parts, f"{ESC}[0m{ESC}[33m E:{status.energy} S:{status.score} DNA:{status.dna} T:{status.tier} F:{status.food_eaten}"]
-    if (len of status.message) > 0:
-        append of [parts, f" | {status.message}"]
-    append of [parts, f"{ESC}[0m"]
+    # Spikes indicator
+    if game.spikes_level > 0:
+        for s in range of 6:
+            spike_angle is game.angle + s * 1.047 - 2.618
+            spike_len is (p_rad + 0.3) * PIXELS_PER_UNIT + 4 + game.spikes_level * 2
+            sx2 is floor of (p_sx + (cos of spike_angle) * spike_len)
+            sy2 is floor of (p_sy + (sin of spike_angle) * spike_len)
+            gfx_line of [p_sx, p_sy, sx2, sy2, 200, 200, 100]
 
-    # Single write
-    write of (join of [parts, ""])
-    flush of null
+    # HUD background
+    gfx_rect of [0, game_h, screen_w, HUD_HEIGHT, 15, 15, 25]
+
+    # HUD separator line
+    gfx_rect of [0, game_h, screen_w, 2, 60, 80, 120]
+
+    # Energy bar
+    bar_w is floor of (game.energy * 2)
+    if bar_w > 300:
+        bar_w is 300
+    bar_color_r is 50
+    bar_color_g is 200
+    if game.energy < 30:
+        bar_color_r is 200
+        bar_color_g is 50
+    gfx_rect of [10, game_h + 10, bar_w, 12, bar_color_r, bar_color_g, 50]
+
+    # DNA pips
+    for d in range of game.dna:
+        if d < 20:
+            gfx_rect of [10 + d * 8, game_h + 30, 6, 6, 100, 220, 255]
+
+    # Tier indicators
+    for t in range of game.scale_tier:
+        gfx_circle of [screen_w - 30 - t * 20, game_h + 20, 6, 255, 200, 50]
+
+    # Score
+    # (No text rendering yet — show score as bar)
+    score_w is floor of (game.score * 3)
+    if score_w > 200:
+        score_w is 200
+    gfx_rect of [10, game_h + 45, score_w, 8, 200, 200, 200]
+
+    gfx_present of null

@@ -1,0 +1,51 @@
+# Test SDL2 graphics — opens a window, draws shapes, waits for quit
+
+result is gfx_open of [800, 600, "Tidepool - EigenScript Graphics Test"]
+if result == 0:
+    print of "Failed to open window"
+    return null
+
+print of "Window opened. Close it or press Escape to exit."
+
+running is 1
+frame is 0
+loop while running == 1:
+    # Poll events
+    ev is gfx_poll of null
+    loop while ev != null:
+        match ev.type:
+            case "quit":
+                running is 0
+            case "keydown":
+                if ev.key == "escape":
+                    running is 0
+        ev is gfx_poll of null
+
+    # Clear to dark blue
+    gfx_clear of [10, 20, 40]
+
+    # Draw some food (green circles)
+    for i in range of 20:
+        x is 100 + i * 30
+        y is 300 + (sin of (frame * 0.05 + i)) * 50
+        gfx_circle of [x, y, 5, 50, 200, 50]
+
+    # Draw player (white circle)
+    px is 400 + (cos of (frame * 0.03)) * 100
+    py is 300 + (sin of (frame * 0.03)) * 100
+    gfx_circle of [px, py, 12, 255, 255, 255]
+
+    # Draw a predator (red)
+    gfx_circle of [600, 200, 15, 200, 50, 50]
+
+    # HUD bar
+    gfx_rect of [0, 560, 800, 40, 20, 20, 20]
+
+    # Present
+    gfx_present of null
+    frame is frame + 1
+
+    gfx_delay of 16
+
+gfx_close of null
+print of f"Done. {frame} frames rendered."

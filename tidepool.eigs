@@ -1,74 +1,117 @@
 # ============================================================
-# Tidepool — Main Game
+# Tidepool — A Spore-inspired cell-stage game in EigenScript
 # ============================================================
-# A Spore-inspired cell-stage evolution game in pure EigenScript.
 #
 # Controls:
-#   Arrow keys  — thrust, turn, brake
-#   1/2/3       — buy speed/sense/spikes (costs 5 DNA)
-#   q           — quit
+#   W/Up     — thrust
+#   S/Down   — brake
+#   A/Left   — turn left
+#   D/Right  — turn right
+#   1        — buy speed (5 DNA)
+#   2        — buy sense (5 DNA)
+#   3        — buy spikes (5 DNA)
+#   Escape   — quit
 
 load_file of "src/game.eigs"
 load_file of "src/renderer.eigs"
 
-ESC is chr of 27
+WINDOW_W is 800
+WINDOW_H is 600
 
-# Screen dimensions
-SCREEN_W is 60
-SCREEN_H is 20
-FRAME_DELAY is 70000
+# Open window
+result is gfx_open of [WINDOW_W, WINDOW_H, "Tidepool"]
+if result == 0:
+    print of "Failed to open graphics window"
 
-# Hide cursor, clear screen
-write of f"{ESC}[?25l{ESC}[2J"
-flush of null
+# Create game
+game is new_game of [60.0, 30.0, 42]
 
-game is new_game of [60.0, 20.0, 42]
+# Input state (held keys)
+keys_held is {
+    "thrust": 0, "brake": 0,
+    "left": 0, "right": 0
+}
 
-# Main loop
+# Main game loop
 running is 1
 loop while running == 1:
-    # Non-blocking input
-    key is raw_key of null
+    # Process all pending events
+    ev is gfx_poll of null
+    loop while ev != null:
+        match ev.type:
+            case "quit":
+                running is 0
+            case "keydown":
+                match ev.key:
+                    case "w":
+                        keys_held.thrust is 1
+                    case "up":
+                        keys_held.thrust is 1
+                    case "s":
+                        keys_held.brake is 1
+                    case "down":
+                        keys_held.brake is 1
+                    case "a":
+                        keys_held.left is 1
+                    case "left":
+                        keys_held.left is 1
+                    case "d":
+                        keys_held.right is 1
+                    case "right":
+                        keys_held.right is 1
+                    case "1":
+                        game is game_action of [game, ACTION_BUY_SPEED]
+                    case "2":
+                        game is game_action of [game, ACTION_BUY_SENSE]
+                    case "3":
+                        game is game_action of [game, ACTION_BUY_SPIKES]
+                    case "escape":
+                        running is 0
+            case "keyup":
+                match ev.key:
+                    case "w":
+                        keys_held.thrust is 0
+                    case "up":
+                        keys_held.thrust is 0
+                    case "s":
+                        keys_held.brake is 0
+                    case "down":
+                        keys_held.brake is 0
+                    case "a":
+                        keys_held.left is 0
+                    case "left":
+                        keys_held.left is 0
+                    case "d":
+                        keys_held.right is 0
+                    case "right":
+                        keys_held.right is 0
+        ev is gfx_poll of null
 
-    # Reset movement
-    game.thrusting is 0
-    game.braking is 0
-    game.turning is 0
+    # Apply held keys to game
+    game.thrusting is keys_held.thrust
+    game.braking is keys_held.brake
+    if keys_held.left == 1:
+        game.turning is -1
+    elif keys_held.right == 1:
+        game.turning is 1
+    else:
+        game.turning is 0
 
-    # Handle input
-    match key:
-        case "up":
-            game is game_action of [game, ACTION_THRUST]
-        case "down":
-            game is game_action of [game, ACTION_BRAKE]
-        case "left":
-            game is game_action of [game, ACTION_TURN_LEFT]
-        case "right":
-            game is game_action of [game, ACTION_TURN_RIGHT]
-        case "1":
-            game is game_action of [game, ACTION_BUY_SPEED]
-        case "2":
-            game is game_action of [game, ACTION_BUY_SENSE]
-        case "3":
-            game is game_action of [game, ACTION_BUY_SPIKES]
-        case "q":
-            running is 0
-
-    # Tick
+    # Simulation tick
     game is game_tick of game
 
     # Render
-    render_game of [game, SCREEN_W, SCREEN_H]
+    render_game of [game, WINDOW_W, WINDOW_H]
 
     # Game over
     if game.game_over == 1:
-        write of f"\n\n{ESC}[31m GAME OVER: {game.message}{ESC}[0m\n"
-        write of f" Score: {game.score} | Food: {game.food_eaten} | Tier: {game.scale_tier}\n"
-        flush of null
+        # Show for a moment then exit
+        gfx_delay of 2000
         running is 0
 
-    usleep of FRAME_DELAY
+    # Frame timing (vsync handles most of it)
+    gfx_delay of 1
 
-# Cleanup
-write of f"{ESC}[?25h{ESC}[0m\n"
-flush of null
+gfx_close of null
+print of f"Game over: {game.message}"
+print of f"Score: {game.score} | Food: {game.food_eaten} | Tier: {game.scale_tier}"

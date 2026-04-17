@@ -1,0 +1,47 @@
+# Benchmark: how long does each part of the game loop take?
+
+load_file of "src/game.eigs"
+load_file of "src/renderer.eigs"
+
+define now as:
+    r is exec_capture of ["date", "+%s%N"]
+    return num of (trim of r[1])
+
+game is new_game of [60.0, 20.0, 42]
+
+# Benchmark game_tick (no rendering)
+t1 is now of null
+for i in range of 100:
+    game is game_tick of game
+t2 is now of null
+ms is (t2 - t1) / 1000000
+print of f"100 game ticks: {ms}ms"
+
+# Benchmark render
+t1 is now of null
+for i in range of 10:
+    render_game of [game, 60, 20]
+t2 is now of null
+ms is (t2 - t1) / 1000000
+print of f"10 renders (60x20): {ms}ms"
+
+# Benchmark buffer init
+t1 is now of null
+for frame in range of 10:
+    buf is []
+    for i in range of 1200:
+        append of [buf, " "]
+t2 is now of null
+ms is (t2 - t1) / 1000000
+print of f"10x buffer init (1200 appends): {ms}ms"
+
+# Benchmark just join
+parts is []
+for i in range of 2000:
+    append of [parts, "x"]
+t1 is now of null
+for i in range of 100:
+    result is join of [parts, ""]
+t2 is now of null
+ms is (t2 - t1) / 1000000
+print of f"100x join(2000 parts): {ms}ms"

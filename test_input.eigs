@@ -1,0 +1,16 @@
+# Test raw keyboard input
+# Press keys and see what comes back. q to quit.
+
+print of "Press keys (q to quit):"
+print of ""
+
+running is 1
+loop while running == 1:
+    key is raw_key of null
+    if (len of key) > 0:
+        if key == "q":
+            running is 0
+        else:
+            print of f"Key: '{key}' (len={len of key})"
+    usleep of 50000
+print of "Done."
