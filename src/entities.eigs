@@ -1,0 +1,102 @@
+# ============================================================
+# Tidepool — Entity Constructors
+# ============================================================
+# Creates game entities as dicts.
+
+load_file of "src/constants.eigs"
+
+# Create a default creature spec
+define new_creature_spec as:
+    return {
+        "palette": 0,
+        "body_shape": 0,
+        "body_segments": 3,
+        "pattern": 0,
+        "mouth_type": MOUTH_FILTER,
+        "eyes": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "spikes": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "appendages": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    }
+
+# Create a food entity
+define new_food(x, y) as:
+    return {"px": x, "py": y, "active": 1}
+
+# Create a meat chunk
+define new_meat(x, y, lifetime) as:
+    return {
+        "px": x, "py": y,
+        "lifetime": lifetime,
+        "active": 1
+    }
+
+# Create a predator
+define new_predator(x, y, angle, species_id, size) as:
+    return {
+        "px": x, "py": y,
+        "vx": 0.0, "vy": 0.0,
+        "angle": angle,
+        "radius": 0.5 + size * 0.3,
+        "size": size,
+        "hp": size + 1,
+        "wander_timer": 0,
+        "target_angle": angle,
+        "active": 1,
+        "species_id": species_id,
+        "target_pred": -1,
+        "stunned_timer": 0,
+        "spec": new_creature_spec of null
+    }
+
+# Create an epic cell (leviathan)
+define new_epic_cell(x, y, patrol_radius) as:
+    return {
+        "px": x, "py": y,
+        "angle": 0.0,
+        "patrol_cx": x, "patrol_cy": y,
+        "patrol_radius": patrol_radius,
+        "radius": 4.0,
+        "active": 1,
+        "spec": new_creature_spec of null
+    }
+
+# Create a poison cloud
+define new_poison_cloud(x, y, is_player) as:
+    return {
+        "px": x, "py": y,
+        "radius": 0.5,
+        "lifetime": 120,
+        "active": 1,
+        "owner_is_player": is_player
+    }
+
+# Create an electric bolt
+define new_electric_bolt(sx, sy, tx, ty) as:
+    return {
+        "sx": sx, "sy": sy,
+        "tx": tx, "ty": ty,
+        "lifetime": 15,
+        "active": 1
+    }
+
+# Create a part drop
+define new_part_drop(x, y, part_type, part_value) as:
+    return {
+        "px": x, "py": y,
+        "vx": rand_range_f of [-0.2, 0.2],
+        "vy": rand_range_f of [-0.2, 0.2],
+        "part_type": part_type,
+        "part_value": part_value,
+        "lifetime": 900,
+        "active": 1
+    }
+
+# Create a species definition
+define new_species(diet, aggression, base_size) as:
+    return {
+        "spec": new_creature_spec of null,
+        "diet": diet,
+        "aggression": aggression,
+        "base_size": base_size,
+        "active": 1
+    }

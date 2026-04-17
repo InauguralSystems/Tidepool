@@ -1,0 +1,348 @@
+# ============================================================
+# Tidepool — Game State & Core Loop
+# ============================================================
+# The main game state and simulation tick.
+
+load_file of "src/constants.eigs"
+load_file of "src/math_utils.eigs"
+load_file of "src/entities.eigs"
+
+# ============================================================
+# Game state constructor
+# ============================================================
+
+define new_game(world_w, world_h, seed_val) as:
+    seed_random of seed_val
+
+    game is {
+        "world_w": world_w,
+        "world_h": world_h,
+
+        # Player physics
+        "px": world_w / 2.0,
+        "py": world_h / 2.0,
+        "vx": 0.0, "vy": 0.0,
+        "angle": 0.0,
+        "thrusting": 0,
+        "braking": 0,
+        "turning": 0,
+
+        # Player stats
+        "mass": 1,
+        "energy": 100,
+        "score": 0,
+        "dna": 0,
+        "food_eaten": 0,
+        "speed_level": 0,
+        "sense_level": 0,
+        "spikes_level": 0,
+
+        # Timing
+        "tick": 0,
+        "energy_timer": 0.0,
+
+        # State
+        "game_over": 0,
+        "game_over_reason": GAME_OVER_NONE,
+        "message": "",
+
+        # Diet
+        "alignment": 0,
+        "plants_eaten": 0,
+        "meat_eaten": 0,
+
+        # Scale tier
+        "scale_tier": 0,
+
+        # Water current
+        "current_angle": 0.0,
+
+        # Combat cooldowns
+        "poison_cooldown": 0,
+        "electric_cooldown": 0,
+        "jet_cooldown": 0,
+        "jet_active": 0,
+
+        # Creature
+        "creature": new_creature_spec of null,
+
+        # Entity lists
+        "food": [],
+        "predators": [],
+        "meat": [],
+        "species": [],
+        "epic_cells": [],
+        "poison_clouds": [],
+        "electric_bolts": [],
+        "part_drops": []
+    }
+
+    # Spawn initial food
+    for i in range of MAX_FOOD:
+        x is rand_range_f of [0, world_w]
+        y is rand_range_f of [0, world_h]
+        append of [game.food, new_food of [x, y]]
+
+    # Spawn initial species
+    for i in range of 4:
+        diet is random_int of [0, 2]
+        aggro is random_int of [0, 2]
+        size is random_int of [1, 3]
+        append of [game.species, new_species of [diet, aggro, size]]
+
+    # Spawn initial predators
+    for i in range of 8:
+        x is rand_range_f of [0, world_w]
+        y is rand_range_f of [0, world_h]
+        angle is rand_range_f of [0, 2.0 * PI]
+        sp_id is random_int of [0, 3]
+        size is game.species[sp_id].base_size
+        append of [game.predators, new_predator of [x, y, angle, sp_id, size]]
+
+    return game
+
+# ============================================================
+# Player physics
+# ============================================================
+
+define player_radius(game) as:
+    return PLAYER_BASE_RADIUS + game.scale_tier * 0.15
+
+define player_thrust(game) as:
+    base is PLAYER_BASE_THRUST + game.speed_level * 1.5
+    if game.jet_active > 0:
+        return base * 2.5
+    return base
+
+define player_drag(game) as:
+    return PLAYER_BASE_DRAG
+
+define player_turn_rate(game) as:
+    return PLAYER_BASE_TURN_RATE + game.speed_level * 0.3
+
+# ============================================================
+# Core simulation tick
+# ============================================================
+
+define game_tick(game) as:
+    if game.game_over == 1:
+        return game
+
+    game.tick is game.tick + 1
+
+    # Water current rotation
+    game.current_angle is game.current_angle + CURRENT_ROTATE_RATE * SIM_DT
+
+    # Player turning
+    if game.turning != 0:
+        turn is player_turn_rate of game
+        game.angle is game.angle + game.turning * turn * SIM_DT
+        game.angle is normalize_angle of game.angle
+
+    # Player thrust
+    if game.thrusting == 1:
+        thrust is player_thrust of game
+        game.vx is game.vx + (cos of game.angle) * thrust * SIM_DT
+        game.vy is game.vy + (sin of game.angle) * thrust * SIM_DT
+
+    # Braking
+    if game.braking == 1:
+        game.vx is game.vx * 0.9
+        game.vy is game.vy * 0.9
+
+    # Water current force
+    cx is (cos of game.current_angle) * CURRENT_SPEED * SIM_DT
+    cy is (sin of game.current_angle) * CURRENT_SPEED * SIM_DT
+    game.vx is game.vx + cx
+    game.vy is game.vy + cy
+
+    # Drag
+    drag is player_drag of game
+    game.vx is game.vx * (1.0 - drag * SIM_DT)
+    game.vy is game.vy * (1.0 - drag * SIM_DT)
+
+    # Move player
+    game.px is wrap_coord of [game.px + game.vx * SIM_DT, game.world_w]
+    game.py is wrap_coord of [game.py + game.vy * SIM_DT, game.world_h]
+
+    # Energy drain
+    game.energy_timer is game.energy_timer + SIM_DT
+    if game.energy_timer >= 1.0:
+        game.energy_timer is game.energy_timer - 1.0
+        game.energy is game.energy - 1
+        if game.energy <= 0:
+            game.game_over is 1
+            game.game_over_reason is GAME_OVER_STARVED
+            game.message is "Starved to death"
+
+    # Food collision
+    p_radius is player_radius of game
+    for i in range of (len of game.food):
+        f is game.food[i]
+        if f.active == 1:
+            dist_sq is torus_dist_sq of [game.px, game.py, f.px, f.py, game.world_w, game.world_h]
+            eat_range is (p_radius + FOOD_RADIUS) * (p_radius + FOOD_RADIUS)
+            if dist_sq < eat_range:
+                f.active is 0
+                game.energy is game.energy + 10
+                game.score is game.score + 1
+                game.food_eaten is game.food_eaten + 1
+                game.plants_eaten is game.plants_eaten + 1
+                game.dna is game.dna + 1
+                # Respawn food elsewhere
+                f.px is rand_range_f of [0, game.world_w]
+                f.py is rand_range_f of [0, game.world_h]
+                f.active is 1
+
+    # Predator AI and physics
+    for i in range of (len of game.predators):
+        pred is game.predators[i]
+        if pred.active == 1:
+            # Simple wander AI
+            pred.wander_timer is pred.wander_timer - 1
+            if pred.wander_timer <= 0:
+                pred.target_angle is rand_range_f of [0 - PI, PI]
+                pred.wander_timer is random_int of [60, 180]
+
+            # Steer toward target angle
+            diff is angle_diff of [pred.angle, pred.target_angle]
+            steer is clamp of [diff, -PREDATOR_BASE_TURN_RATE * SIM_DT, PREDATOR_BASE_TURN_RATE * SIM_DT]
+            pred.angle is normalize_angle of (pred.angle + steer)
+
+            # Thrust
+            pred.vx is pred.vx + (cos of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
+            pred.vy is pred.vy + (sin of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
+
+            # Drag
+            pred.vx is pred.vx * (1.0 - PREDATOR_BASE_DRAG * SIM_DT)
+            pred.vy is pred.vy * (1.0 - PREDATOR_BASE_DRAG * SIM_DT)
+
+            # Move
+            pred.px is wrap_coord of [pred.px + pred.vx * SIM_DT, game.world_w]
+            pred.py is wrap_coord of [pred.py + pred.vy * SIM_DT, game.world_h]
+
+            # Predator-player collision
+            dist_sq is torus_dist_sq of [game.px, game.py, pred.px, pred.py, game.world_w, game.world_h]
+            kill_range is (p_radius + pred.radius) * (p_radius + pred.radius)
+            if dist_sq < kill_range:
+                if game.spikes_level > 0:
+                    # Player has spikes — damage predator
+                    pred.hp is pred.hp - 1
+                    if pred.hp <= 0:
+                        pred.active is 0
+                        game.score is game.score + 10
+                        game.dna is game.dna + 3
+                        # Drop meat
+                        append of [game.meat, new_meat of [pred.px, pred.py, 300]]
+                else:
+                    # Player dies
+                    game.game_over is 1
+                    game.game_over_reason is GAME_OVER_CONSUMED
+                    game.message is "Consumed by predator"
+
+    # Meat decay
+    for i in range of (len of game.meat):
+        m is game.meat[i]
+        if m.active == 1:
+            m.lifetime is m.lifetime - 1
+            if m.lifetime <= 0:
+                m.active is 0
+
+    # Poison cloud decay
+    for i in range of (len of game.poison_clouds):
+        pc is game.poison_clouds[i]
+        if pc.active == 1:
+            pc.lifetime is pc.lifetime - 1
+            pc.radius is pc.radius + 0.02
+            if pc.lifetime <= 0:
+                pc.active is 0
+
+    # Electric bolt decay
+    for i in range of (len of game.electric_bolts):
+        eb is game.electric_bolts[i]
+        if eb.active == 1:
+            eb.lifetime is eb.lifetime - 1
+            if eb.lifetime <= 0:
+                eb.active is 0
+
+    # Combat cooldowns
+    if game.poison_cooldown > 0:
+        game.poison_cooldown is game.poison_cooldown - 1
+    if game.electric_cooldown > 0:
+        game.electric_cooldown is game.electric_cooldown - 1
+    if game.jet_cooldown > 0:
+        game.jet_cooldown is game.jet_cooldown - 1
+    if game.jet_active > 0:
+        game.jet_active is game.jet_active - 1
+
+    # Scale tier progression
+    if game.food_eaten >= 10:
+        if game.scale_tier < SCALE_TIER_COUNT - 1:
+            if (game.food_eaten % 10) == 0:
+                game.scale_tier is game.scale_tier + 1
+                game.message is f"Evolved to tier {game.scale_tier}!"
+
+    return game
+
+# ============================================================
+# Player actions
+# ============================================================
+
+define game_action(game, action) as:
+    match action:
+        case ACTION_THRUST:
+            game.thrusting is 1
+        case ACTION_BRAKE:
+            game.braking is 1
+        case ACTION_TURN_LEFT:
+            game.turning is -1
+        case ACTION_TURN_RIGHT:
+            game.turning is 1
+        case ACTION_BUY_SPEED:
+            if game.dna >= 5:
+                game.dna is game.dna - 5
+                game.speed_level is game.speed_level + 1
+                game.message is f"Speed upgraded to {game.speed_level}"
+        case ACTION_BUY_SENSE:
+            if game.dna >= 5:
+                game.dna is game.dna - 5
+                game.sense_level is game.sense_level + 1
+                game.message is f"Sense upgraded to {game.sense_level}"
+        case ACTION_BUY_SPIKES:
+            if game.dna >= 5:
+                game.dna is game.dna - 5
+                game.spikes_level is game.spikes_level + 1
+                game.message is f"Spikes upgraded to {game.spikes_level}"
+        case _:
+            game.thrusting is 0
+            game.braking is 0
+            game.turning is 0
+    return game
+
+# ============================================================
+# Game status
+# ============================================================
+
+define game_status(game) as:
+    active_pred is 0
+    for i in range of (len of game.predators):
+        if game.predators[i].active == 1:
+            active_pred is active_pred + 1
+
+    active_food is 0
+    for i in range of (len of game.food):
+        if game.food[i].active == 1:
+            active_food is active_food + 1
+
+    return {
+        "tick": game.tick,
+        "energy": game.energy,
+        "score": game.score,
+        "dna": game.dna,
+        "tier": game.scale_tier,
+        "food_eaten": game.food_eaten,
+        "active_food": active_food,
+        "active_predators": active_pred,
+        "game_over": game.game_over,
+        "message": game.message
+    }

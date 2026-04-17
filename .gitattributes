@@ -1,0 +1,5 @@
+* text=auto
+*.eigs text eol=lf linguist-detectable linguist-language=EigenScript
+*.sh text eol=lf
+*.md text eol=lf
+*.png binary

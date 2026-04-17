@@ -1,0 +1,86 @@
+# ============================================================
+# Tidepool — Math Utilities
+# ============================================================
+# Toroidal world math, angle normalization, clamping.
+
+PI is pi of null
+
+define clamp(value, lo, hi) as:
+    if value < lo:
+        return lo
+    if value > hi:
+        return hi
+    return value
+
+define signum(value) as:
+    if value > 0:
+        return 1
+    if value < 0:
+        return -1
+    return 0
+
+define wrap_value(value, levels) as:
+    if levels <= 0:
+        return 0
+    result is value
+    loop while result < 0:
+        result is result + levels
+    loop while result >= levels:
+        result is result - levels
+    return result
+
+# Toroidal world coordinate wrapping
+define wrap_coord(value, limit) as:
+    result is value
+    loop while result < 0.0:
+        result is result + limit
+    loop while result >= limit:
+        result is result - limit
+    return result
+
+# Shortest distance on a torus (signed)
+define torus_delta(from_val, to_val, limit) as:
+    raw is to_val - from_val
+    half is limit * 0.5
+    if raw > half:
+        raw is raw - limit
+    elif raw < (0 - half):
+        raw is raw + limit
+    return raw
+
+# Squared distance on a torus
+define torus_dist_sq(x1, y1, x2, y2, ww, wh) as:
+    dx is torus_delta of [x1, x2, ww]
+    dy is torus_delta of [y1, y2, wh]
+    return dx * dx + dy * dy
+
+# Normalize angle to [-PI, PI]
+define normalize_angle(a) as:
+    result is a
+    two_pi is 2.0 * PI
+    loop while result > PI:
+        result is result - two_pi
+    loop while result < (0 - PI):
+        result is result + two_pi
+    return result
+
+# Signed angle difference
+define angle_diff(a, b) as:
+    return normalize_angle of (b - a)
+
+# Body forward and lateral axes from angle
+define body_axes(angle) as:
+    fx is cos of angle
+    fy is sin of angle
+    return {
+        "fx": fx, "fy": fy,
+        "lx": 0 - fy, "ly": fx
+    }
+
+# Distance (not squared)
+define torus_dist(x1, y1, x2, y2, ww, wh) as:
+    return sqrt of (torus_dist_sq of [x1, y1, x2, y2, ww, wh])
+
+# Random float in [min, max]
+define rand_range_f(lo, hi) as:
+    return lo + (random of null) * (hi - lo)

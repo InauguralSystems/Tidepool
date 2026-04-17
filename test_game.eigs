@@ -1,0 +1,50 @@
+# Tidepool — Game Core Test
+# Runs 300 ticks of simulation and prints status.
+
+load_file of "src/game.eigs"
+
+print of "=== Tidepool Game Core Test ==="
+print of ""
+
+# Create a game
+game is new_game of [60.0, 20.0, 42]
+print of f"World: {game.world_w} x {game.world_h}"
+print of f"Player: ({game.px}, {game.py})"
+print of f"Food: {len of game.food}"
+print of f"Predators: {len of game.predators}"
+print of f"Species: {len of game.species}"
+print of ""
+
+# Simulate 300 ticks (~5 seconds) with thrust
+print of "Simulating 300 ticks with thrust..."
+for tick in range of 300:
+    if tick < 100:
+        game is game_action of [game, ACTION_THRUST]
+    elif tick < 200:
+        game is game_action of [game, ACTION_TURN_LEFT]
+    else:
+        game is game_action of [game, ACTION_NONE]
+    game is game_tick of game
+    if game.game_over == 1:
+        print of f"Game over at tick {tick}: {game.message}"
+        break
+
+status is game_status of game
+print of ""
+print of "=== Final Status ==="
+print of f"Tick: {status.tick}"
+print of f"Energy: {status.energy}"
+print of f"Score: {status.score}"
+print of f"DNA: {status.dna}"
+print of f"Tier: {status.tier}"
+print of f"Food eaten: {status.food_eaten}"
+print of f"Active food: {status.active_food}"
+print of f"Active predators: {status.active_predators}"
+print of f"Game over: {status.game_over}"
+if (len of status.message) > 0:
+    print of f"Message: {status.message}"
+
+print of ""
+print of f"Player position: ({game.px}, {game.py})"
+print of f"Player velocity: ({game.vx}, {game.vy})"
+print of "=== Test complete ==="
