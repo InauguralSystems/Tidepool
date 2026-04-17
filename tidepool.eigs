@@ -1,7 +1,7 @@
 # ============================================================
 # Tidepool — Main Game
 # ============================================================
-# A Spore-inspired cell-stage evolution game in EigenScript.
+# A Spore-inspired cell-stage evolution game in pure EigenScript.
 #
 # Controls:
 #   Arrow keys  — thrust, turn, brake
@@ -11,24 +11,26 @@
 load_file of "src/game.eigs"
 load_file of "src/renderer.eigs"
 
-# Screen dimensions (characters)
-SCREEN_W is 80
-SCREEN_H is 24
-FRAME_DELAY is 50000
+ESC is chr of 27
 
-# Initialize
-ansi_hide_cursor of null
-ansi_clear of null
+# Screen dimensions
+SCREEN_W is 60
+SCREEN_H is 20
+FRAME_DELAY is 70000
+
+# Hide cursor, clear screen
+write of f"{ESC}[?25l{ESC}[2J"
+flush of null
 
 game is new_game of [60.0, 20.0, 42]
 
 # Main loop
 running is 1
 loop while running == 1:
-    # Read input (non-blocking)
+    # Non-blocking input
     key is raw_key of null
 
-    # Reset movement each frame
+    # Reset movement
     game.thrusting is 0
     game.braking is 0
     game.turning is 0
@@ -52,24 +54,21 @@ loop while running == 1:
         case "q":
             running is 0
 
-    # Simulation tick
+    # Tick
     game is game_tick of game
 
     # Render
     render_game of [game, SCREEN_W, SCREEN_H]
 
-    # Game over check
+    # Game over
     if game.game_over == 1:
-        ansi_goto of [SCREEN_H + 2, 1]
-        ansi_color of COLOR_RED
-        print of f"GAME OVER: {game.message}"
-        print of f"Score: {game.score} | Food: {game.food_eaten} | Tier: {game.scale_tier}"
-        ansi_reset of null
+        write of f"\n\n{ESC}[31m GAME OVER: {game.message}{ESC}[0m\n"
+        write of f" Score: {game.score} | Food: {game.food_eaten} | Tier: {game.scale_tier}\n"
+        flush of null
         running is 0
 
-    # Frame delay
     usleep of FRAME_DELAY
 
 # Cleanup
-ansi_show_cursor of null
-ansi_reset of null
+write of f"{ESC}[?25h{ESC}[0m\n"
+flush of null

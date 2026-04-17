@@ -1,56 +1,101 @@
 # ============================================================
-# Tidepool — Terminal Renderer (Native)
+# Tidepool — Terminal Renderer (Pure EigenScript)
 # ============================================================
-# Uses screen_render C builtin for fast terminal output.
-# Game logic builds entity list, C does the pixel work.
+# Builds screen as a list of strings, joins once, writes once.
+# No C rendering builtins — uses only join, write, flush.
 
 load_file of "src/constants.eigs"
 
+ESC is chr of 27
+
 # ============================================================
-# Build renderable entity list from game state
+# Render game state to terminal
 # ============================================================
 
 define render_game(game, screen_w, screen_h) as:
-    entities is []
+    # View window centered on player
+    view_w is screen_w * 0.5
+    view_h is screen_h * 0.5
+    half_vw is view_w / 2.0
+    half_vh is view_h / 2.0
 
-    # Food — green dots
+    # Build flat screen buffer
+    buf_size is screen_w * screen_h
+    buf is []
+    buf_colors is []
+    for i in range of buf_size:
+        append of [buf, " "]
+        append of [buf_colors, 0]
+
+    # Project entity to screen index
+    define project(wx, wy) as:
+        dx is torus_delta of [game.px, wx, game.world_w]
+        dy is torus_delta of [game.py, wy, game.world_h]
+        col is floor of ((dx + half_vw) / view_w * screen_w)
+        row is floor of ((dy + half_vh) / view_h * screen_h)
+        if col >= 0:
+            if col < screen_w:
+                if row >= 0:
+                    if row < screen_h:
+                        return row * screen_w + col
+        return -1
+
+    # Project food
     for i in range of (len of game.food):
         f is game.food[i]
         if f.active == 1:
-            append of [entities, [f.px, f.py, ".", 32]]
+            idx is project of [f.px, f.py]
+            if idx >= 0:
+                set_at of [buf, idx, "."]
+                set_at of [buf_colors, idx, 32]
 
-    # Meat — magenta
-    for i in range of (len of game.meat):
-        m is game.meat[i]
-        if m.active == 1:
-            append of [entities, [m.px, m.py, "m", 35]]
-
-    # Predators — red X
+    # Project predators
     for i in range of (len of game.predators):
         p is game.predators[i]
         if p.active == 1:
-            append of [entities, [p.px, p.py, "X", 31]]
+            idx is project of [p.px, p.py]
+            if idx >= 0:
+                set_at of [buf, idx, "X"]
+                set_at of [buf_colors, idx, 31]
 
-    # Poison clouds — yellow
-    for i in range of (len of game.poison_clouds):
-        pc is game.poison_clouds[i]
-        if pc.active == 1:
-            append of [entities, [pc.px, pc.py, "*", 33]]
+    # Project meat
+    for i in range of (len of game.meat):
+        m is game.meat[i]
+        if m.active == 1:
+            idx is project of [m.px, m.py]
+            if idx >= 0:
+                set_at of [buf, idx, "m"]
+                set_at of [buf_colors, idx, 35]
 
-    # Player — white @, always rendered
-    append of [entities, [game.px, game.py, "@", 37]]
+    # Player at center
+    center is floor of (screen_h / 2) * screen_w + floor of (screen_w / 2)
+    set_at of [buf, center, "@"]
+    set_at of [buf_colors, center, 37]
 
-    # Render all entities via C builtin
-    screen_render of [
-        entities, screen_w, screen_h,
-        game.px, game.py,
-        game.world_w, game.world_h
-    ]
+    # Build output as list of fragments, join once
+    parts is []
+    append of [parts, f"{ESC}[H"]
+    prev_color is 0
+    for row in range of screen_h:
+        for col in range of screen_w:
+            idx is row * screen_w + col
+            c is buf_colors[idx]
+            if c != prev_color:
+                if c > 0:
+                    append of [parts, f"{ESC}[{c}m"]
+                else:
+                    append of [parts, f"{ESC}[0m"]
+                prev_color is c
+            append of [parts, buf[idx]]
+        append of [parts, "\n"]
 
-    # HUD line
+    # HUD
     status is game_status of game
-    hud is f" E:{status.energy} S:{status.score} DNA:{status.dna} T:{status.tier} F:{status.food_eaten}"
+    append of [parts, f"{ESC}[0m{ESC}[33m E:{status.energy} S:{status.score} DNA:{status.dna} T:{status.tier} F:{status.food_eaten}"]
     if (len of status.message) > 0:
-        hud is hud + f" | {status.message}"
-    write of f"\033[33m{hud}\033[0m"
+        append of [parts, f" | {status.message}"]
+    append of [parts, f"{ESC}[0m"]
+
+    # Single write
+    write of (join of [parts, ""])
     flush of null
