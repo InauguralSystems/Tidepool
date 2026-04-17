@@ -130,43 +130,45 @@ define game_tick(game) as:
 
     game.tick is game.tick + 1
 
-    # Water current rotation
-    game.current_angle is game.current_angle + CURRENT_ROTATE_RATE * SIM_DT
+    # Physics — no observation needed, pure numeric mutation
+    unobserved:
+        # Water current rotation
+        game.current_angle is game.current_angle + CURRENT_ROTATE_RATE * SIM_DT
 
-    # Player turning
-    if game.turning != 0:
-        turn is player_turn_rate of game
-        game.angle is game.angle + game.turning * turn * SIM_DT
-        game.angle is normalize_angle of game.angle
+        # Player turning
+        if game.turning != 0:
+            turn is player_turn_rate of game
+            game.angle is game.angle + game.turning * turn * SIM_DT
+            game.angle is normalize_angle of game.angle
 
-    # Player thrust
-    if game.thrusting == 1:
-        thrust is player_thrust of game
-        game.vx is game.vx + (cos of game.angle) * thrust * SIM_DT
-        game.vy is game.vy + (sin of game.angle) * thrust * SIM_DT
+        # Player thrust
+        if game.thrusting == 1:
+            thrust is player_thrust of game
+            game.vx is game.vx + (cos of game.angle) * thrust * SIM_DT
+            game.vy is game.vy + (sin of game.angle) * thrust * SIM_DT
 
-    # Braking
-    if game.braking == 1:
-        game.vx is game.vx * 0.9
-        game.vy is game.vy * 0.9
+        # Braking
+        if game.braking == 1:
+            game.vx is game.vx * 0.9
+            game.vy is game.vy * 0.9
 
-    # Water current force
-    cx is (cos of game.current_angle) * CURRENT_SPEED * SIM_DT
-    cy is (sin of game.current_angle) * CURRENT_SPEED * SIM_DT
-    game.vx is game.vx + cx
-    game.vy is game.vy + cy
+        # Water current force
+        cx is (cos of game.current_angle) * CURRENT_SPEED * SIM_DT
+        cy is (sin of game.current_angle) * CURRENT_SPEED * SIM_DT
+        game.vx is game.vx + cx
+        game.vy is game.vy + cy
 
-    # Drag
-    drag is player_drag of game
-    game.vx is game.vx * (1.0 - drag * SIM_DT)
-    game.vy is game.vy * (1.0 - drag * SIM_DT)
+        # Drag
+        drag is player_drag of game
+        game.vx is game.vx * (1.0 - drag * SIM_DT)
+        game.vy is game.vy * (1.0 - drag * SIM_DT)
 
-    # Move player
-    game.px is wrap_coord of [game.px + game.vx * SIM_DT, game.world_w]
-    game.py is wrap_coord of [game.py + game.vy * SIM_DT, game.world_h]
+        # Move player
+        game.px is wrap_coord of [game.px + game.vx * SIM_DT, game.world_w]
+        game.py is wrap_coord of [game.py + game.vy * SIM_DT, game.world_h]
 
-    # Energy drain
-    game.energy_timer is game.energy_timer + SIM_DT
+        # Energy drain
+        game.energy_timer is game.energy_timer + SIM_DT
     if game.energy_timer >= 1.0:
         game.energy_timer is game.energy_timer - 1.0
         game.energy is game.energy - 1
@@ -199,28 +201,29 @@ define game_tick(game) as:
     for i in range of (len of game.predators):
         pred is game.predators[i]
         if pred.active == 1:
-            # Simple wander AI
-            pred.wander_timer is pred.wander_timer - 1
-            if pred.wander_timer <= 0:
-                pred.target_angle is rand_range_f of [0 - PI, PI]
-                pred.wander_timer is random_int of [60, 180]
+            # Predator physics — unobserved for performance
+            unobserved:
+                pred.wander_timer is pred.wander_timer - 1
+                if pred.wander_timer <= 0:
+                    pred.target_angle is rand_range_f of [0 - PI, PI]
+                    pred.wander_timer is random_int of [60, 180]
 
-            # Steer toward target angle
-            diff is angle_diff of [pred.angle, pred.target_angle]
-            steer is clamp of [diff, -PREDATOR_BASE_TURN_RATE * SIM_DT, PREDATOR_BASE_TURN_RATE * SIM_DT]
-            pred.angle is normalize_angle of (pred.angle + steer)
+                # Steer toward target angle
+                diff is angle_diff of [pred.angle, pred.target_angle]
+                steer is clamp of [diff, -PREDATOR_BASE_TURN_RATE * SIM_DT, PREDATOR_BASE_TURN_RATE * SIM_DT]
+                pred.angle is normalize_angle of (pred.angle + steer)
 
-            # Thrust
-            pred.vx is pred.vx + (cos of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
-            pred.vy is pred.vy + (sin of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
+                # Thrust
+                pred.vx is pred.vx + (cos of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
+                pred.vy is pred.vy + (sin of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
 
-            # Drag
-            pred.vx is pred.vx * (1.0 - PREDATOR_BASE_DRAG * SIM_DT)
-            pred.vy is pred.vy * (1.0 - PREDATOR_BASE_DRAG * SIM_DT)
+                # Drag
+                pred.vx is pred.vx * (1.0 - PREDATOR_BASE_DRAG * SIM_DT)
+                pred.vy is pred.vy * (1.0 - PREDATOR_BASE_DRAG * SIM_DT)
 
-            # Move
-            pred.px is wrap_coord of [pred.px + pred.vx * SIM_DT, game.world_w]
-            pred.py is wrap_coord of [pred.py + pred.vy * SIM_DT, game.world_h]
+                # Move
+                pred.px is wrap_coord of [pred.px + pred.vx * SIM_DT, game.world_w]
+                pred.py is wrap_coord of [pred.py + pred.vy * SIM_DT, game.world_h]
 
             # Predator-player collision
             dist_sq is torus_dist_sq of [game.px, game.py, pred.px, pred.py, game.world_w, game.world_h]
