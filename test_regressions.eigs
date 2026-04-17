@@ -1,0 +1,103 @@
+# Regression tests — assertions for bugs caught in code review.
+# Uses the `assert` builtin directly so it works without lib/test.eigs
+# being on the load path.
+
+load_file of "src/game.eigs"
+
+print of "=== Tidepool regressions ==="
+
+# ------------------------------------------------------------
+# Tier progression — bump exactly once per 10 food eaten.
+# Old bug: the check fired every tick while food_eaten % 10 == 0,
+# rocketing scale_tier to SCALE_TIER_COUNT - 1 within a few frames.
+# ------------------------------------------------------------
+game is new_game of [60.0, 20.0, 42]
+
+# Quiet the world so nothing mutates food_eaten during the test.
+for i in range of (len of game.food):
+    game.food[i].active is 0
+for i in range of (len of game.predators):
+    game.predators[i].active is 0
+
+game.food_eaten is 10
+assert of [game.scale_tier == 0, "tier starts at 0"]
+
+game is game_tick of game
+assert of [game.scale_tier == 1, "tier bumps to 1 after first tick at food_eaten=10"]
+
+for i in range of 10:
+    game is game_tick of game
+assert of [game.scale_tier == 1, "tier stays at 1 while food_eaten stays at 10"]
+
+game.food_eaten is 20
+game is game_tick of game
+assert of [game.scale_tier == 2, "tier bumps to 2 when food_eaten crosses 20"]
+
+print of "  tier progression: ok"
+
+# ------------------------------------------------------------
+# Toroidal world wrap — player walking off the east edge reappears
+# on the west edge.
+# ------------------------------------------------------------
+game is new_game of [60.0, 20.0, 42]
+for i in range of (len of game.predators):
+    game.predators[i].active is 0
+
+game.px is 59.95
+game.py is 10.0
+game.vx is 10.0
+game.vy is 0.0
+game.angle is 0.0
+game.thrusting is 0
+game.braking is 0
+
+game is game_tick of game
+assert of [game.px < 5.0, "player px wraps past world_w"]
+assert of [game.px >= 0.0, "player px stays non-negative after wrap"]
+
+print of "  torus wrap: ok"
+
+# ------------------------------------------------------------
+# Food collision — food at player position is consumed on the next tick.
+# ------------------------------------------------------------
+game is new_game of [60.0, 20.0, 42]
+for i in range of (len of game.predators):
+    game.predators[i].active is 0
+
+game.food[0].px is game.px
+game.food[0].py is game.py
+game.food[0].active is 1
+before_count is game.food_eaten
+before_energy is game.energy
+
+game is game_tick of game
+assert of [game.food_eaten == before_count + 1, "food at player position is eaten"]
+assert of [game.energy > before_energy, "eating food increases energy"]
+
+print of "  food collision: ok"
+
+# ------------------------------------------------------------
+# Meat pool — killing predators does not grow the meat list.
+# ------------------------------------------------------------
+game is new_game of [60.0, 20.0, 42]
+meat_len_before is len of game.meat
+
+# Pre-allocation should already fill the pool to MAX_MEAT.
+assert of [meat_len_before == MAX_MEAT, "meat pool pre-allocated to MAX_MEAT"]
+
+# All slots start inactive.
+inactive is 0
+for i in range of (len of game.meat):
+    if game.meat[i].active == 0:
+        inactive is inactive + 1
+assert of [inactive == MAX_MEAT, "all meat slots start inactive"]
+
+# Spawn some meat — list length must not change.
+result is spawn_meat of [game.meat, 1.0, 1.0, 300]
+assert of [result == 1, "spawn_meat returns 1 when pool has a free slot"]
+assert of [(len of game.meat) == meat_len_before, "spawn_meat does not grow the list"]
+
+print of "  meat pool: ok"
+
+print of ""
+print of "=== All regressions passed ==="
