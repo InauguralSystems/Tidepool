@@ -1,0 +1,75 @@
+# ============================================================
+# Tidepool — Main Game
+# ============================================================
+# A Spore-inspired cell-stage evolution game in EigenScript.
+#
+# Controls:
+#   Arrow keys  — thrust, turn, brake
+#   1/2/3       — buy speed/sense/spikes (costs 5 DNA)
+#   q           — quit
+
+load_file of "src/game.eigs"
+load_file of "src/renderer.eigs"
+
+# Screen dimensions (characters)
+SCREEN_W is 80
+SCREEN_H is 24
+FRAME_DELAY is 50000
+
+# Initialize
+ansi_hide_cursor of null
+ansi_clear of null
+
+game is new_game of [60.0, 20.0, 42]
+
+# Main loop
+running is 1
+loop while running == 1:
+    # Read input (non-blocking)
+    key is raw_key of null
+
+    # Reset movement each frame
+    game.thrusting is 0
+    game.braking is 0
+    game.turning is 0
+
+    # Handle input
+    match key:
+        case "up":
+            game is game_action of [game, ACTION_THRUST]
+        case "down":
+            game is game_action of [game, ACTION_BRAKE]
+        case "left":
+            game is game_action of [game, ACTION_TURN_LEFT]
+        case "right":
+            game is game_action of [game, ACTION_TURN_RIGHT]
+        case "1":
+            game is game_action of [game, ACTION_BUY_SPEED]
+        case "2":
+            game is game_action of [game, ACTION_BUY_SENSE]
+        case "3":
+            game is game_action of [game, ACTION_BUY_SPIKES]
+        case "q":
+            running is 0
+
+    # Simulation tick
+    game is game_tick of game
+
+    # Render
+    render_game of [game, SCREEN_W, SCREEN_H]
+
+    # Game over check
+    if game.game_over == 1:
+        ansi_goto of [SCREEN_H + 2, 1]
+        ansi_color of COLOR_RED
+        print of f"GAME OVER: {game.message}"
+        print of f"Score: {game.score} | Food: {game.food_eaten} | Tier: {game.scale_tier}"
+        ansi_reset of null
+        running is 0
+
+    # Frame delay
+    usleep of FRAME_DELAY
+
+# Cleanup
+ansi_show_cursor of null
+ansi_reset of null

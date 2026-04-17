@@ -1,0 +1,141 @@
+# ============================================================
+# Tidepool — Terminal Renderer
+# ============================================================
+# ANSI escape-based terminal rendering.
+
+load_file of "src/constants.eigs"
+
+# ANSI escape sequences
+ESC is chr of 27
+
+define ansi_clear as:
+    write of f"{ESC}[2J"
+
+define ansi_home as:
+    write of f"{ESC}[H"
+
+define ansi_goto(row, col) as:
+    write of f"{ESC}[{row};{col}H"
+
+define ansi_color(code) as:
+    write of f"{ESC}[{code}m"
+
+define ansi_reset as:
+    write of f"{ESC}[0m"
+
+define ansi_hide_cursor as:
+    write of f"{ESC}[?25l"
+
+define ansi_show_cursor as:
+    write of f"{ESC}[?25h"
+
+# Color codes
+COLOR_RESET is 0
+COLOR_GREEN is 32
+COLOR_RED is 31
+COLOR_YELLOW is 33
+COLOR_BLUE is 34
+COLOR_MAGENTA is 35
+COLOR_CYAN is 36
+COLOR_WHITE is 37
+COLOR_BG_BLUE is 44
+
+# ============================================================
+# Render the game state to terminal
+# ============================================================
+
+define render_game(game, screen_w, screen_h) as:
+    ansi_home of null
+
+    # Calculate view window (centered on player)
+    view_w is screen_w * 0.5
+    view_h is screen_h * 0.5
+    view_x is game.px - view_w / 2.0
+    view_y is game.py - view_h / 2.0
+
+    # Build screen buffer as list of strings (one per row)
+    for row in range of screen_h:
+        line is ""
+        for col in range of screen_w:
+            # World coordinate for this screen cell
+            wx is view_x + col * (view_w / screen_w)
+            wy is view_y + row * (view_h / screen_h)
+
+            # Wrap to world
+            wx is wrap_coord of [wx, game.world_w]
+            wy is wrap_coord of [wy, game.world_h]
+
+            ch is " "
+            color is COLOR_BLUE
+
+            # Check for player
+            dx is torus_delta of [wx, game.px, game.world_w]
+            dy is torus_delta of [wy, game.py, game.world_h]
+            if (abs of dx) < 0.5:
+                if (abs of dy) < 0.3:
+                    ch is "@"
+                    color is COLOR_WHITE
+
+            # Check for food (if not already player)
+            if ch == " ":
+                for fi in range of (len of game.food):
+                    f is game.food[fi]
+                    if f.active == 1:
+                        dx is torus_delta of [wx, f.px, game.world_w]
+                        dy is torus_delta of [wy, f.py, game.world_h]
+                        if (abs of dx) < 0.4:
+                            if (abs of dy) < 0.3:
+                                ch is "."
+                                color is COLOR_GREEN
+                                break
+
+            # Check for predators
+            if ch == " ":
+                for pi in range of (len of game.predators):
+                    p is game.predators[pi]
+                    if p.active == 1:
+                        dx is torus_delta of [wx, p.px, game.world_w]
+                        dy is torus_delta of [wy, p.py, game.world_h]
+                        if (abs of dx) < p.radius * 0.6:
+                            if (abs of dy) < p.radius * 0.4:
+                                ch is "X"
+                                color is COLOR_RED
+                                break
+
+            # Check for meat
+            if ch == " ":
+                for mi in range of (len of game.meat):
+                    m is game.meat[mi]
+                    if m.active == 1:
+                        dx is torus_delta of [wx, m.px, game.world_w]
+                        dy is torus_delta of [wy, m.py, game.world_h]
+                        if (abs of dx) < 0.4:
+                            if (abs of dy) < 0.3:
+                                ch is "m"
+                                color is COLOR_MAGENTA
+                                break
+
+            # Water background
+            if ch == " ":
+                # Subtle wave pattern
+                wave is sin of (wx * 0.5 + wy * 0.3 + game.tick * 0.02)
+                if wave > 0.7:
+                    ch is "~"
+                    color is COLOR_CYAN
+
+            # Output character with color
+            ansi_color of color
+            write of ch
+
+        write of "\n"
+
+    # HUD line
+    ansi_reset of null
+    status is game_status of game
+    hud is f" Energy:{status.energy} Score:{status.score} DNA:{status.dna} Tier:{status.tier} Food:{status.food_eaten} "
+    if (len of status.message) > 0:
+        hud is hud + f"| {status.message} "
+    ansi_color of COLOR_YELLOW
+    write of hud
+    ansi_reset of null
+    flush of null
