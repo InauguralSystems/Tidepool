@@ -99,6 +99,12 @@ define new_game(world_w, world_h, seed_val) as:
         size is game.species[sp_id].base_size
         append of [game.predators, new_predator of [x, y, angle, sp_id, size]]
 
+    # Pre-allocate meat pool so spawn_meat can reuse slots
+    for i in range of MAX_MEAT:
+        m is new_meat of [0.0, 0.0, 0]
+        m.active is 0
+        append of [game.meat, m]
+
     return game
 
 # ============================================================
@@ -236,8 +242,8 @@ define game_tick(game) as:
                         pred.active is 0
                         game.score is game.score + 10
                         game.dna is game.dna + 3
-                        # Drop meat
-                        append of [game.meat, new_meat of [pred.px, pred.py, 300]]
+                        # Drop meat into the pre-allocated pool
+                        spawn_meat of [game.meat, pred.px, pred.py, 300]
                 else:
                     # Player dies
                     game.game_over is 1
