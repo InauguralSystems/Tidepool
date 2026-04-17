@@ -89,14 +89,7 @@ loop while running == 1:
         ev is gfx_poll of null
 
     # Apply held keys to game
-    game.thrusting is keys_held.thrust
-    game.braking is keys_held.brake
-    if keys_held.left == 1:
-        game.turning is -1
-    elif keys_held.right == 1:
-        game.turning is 1
-    else:
-        game.turning is 0
+    apply_held_keys of [game, keys_held]
 
     # Simulation tick — mutates `game` in place
     game_tick of game

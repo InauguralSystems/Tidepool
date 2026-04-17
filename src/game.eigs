@@ -297,6 +297,22 @@ define game_tick(game) as:
     return game
 
 # ============================================================
+# Input mapping
+# ============================================================
+# Apply a held-keys dict (from the event loop's polling state) onto
+# the game's input fields. Call once per frame after draining events.
+
+define apply_held_keys(game, keys) as:
+    game.thrusting is keys.thrust
+    game.braking is keys.brake
+    if keys.left == 1:
+        game.turning is -1
+    elif keys.right == 1:
+        game.turning is 1
+    else:
+        game.turning is 0
+
+# ============================================================
 # Player actions
 # ============================================================
 # Mutates `game` in place. Returns `game` for convenience.
