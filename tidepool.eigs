@@ -97,9 +97,6 @@ loop while running == 1:
     else:
         game.turning is 0
 
-    # Arena: reclaim transient allocations each frame
-    arena_mark of null
-
     # Simulation tick
     game is game_tick of game
 
@@ -109,9 +106,6 @@ loop while running == 1:
     catch err:
         print of f"Render error: {err}"
         running is 0
-
-    # Reclaim all transient values from this frame
-    arena_reset of null
 
     # Game over
     if game.game_over == 1:
