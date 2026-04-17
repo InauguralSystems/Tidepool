@@ -63,7 +63,9 @@ print of "  torus wrap: ok"
 game is new_game of [60.0, 20.0, 42]
 for i in range of (len of game.predators):
     game.predators[i].active is 0
-
+# Deactivate all food, then place exactly one at player position
+for i in range of (len of game.food):
+    game.food[i].active is 0
 game.food[0].px is game.px
 game.food[0].py is game.py
 game.food[0].active is 1
