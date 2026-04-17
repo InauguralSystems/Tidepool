@@ -146,22 +146,27 @@ define render_game(game, screen_w, screen_h) as:
     if game.energy < 30:
         bar_color_r is 200
         bar_color_g is 50
-    gfx_rect of [10, game_h + 10, bar_w, 12, bar_color_r, bar_color_g, 50]
+    gfx_rect of [10, game_h + 8, bar_w, 10, bar_color_r, bar_color_g, 50]
+    gfx_text of [10, game_h + 22, f"Energy: {floor of game.energy}", 200, 200, 200, 2]
 
-    # DNA pips
-    for d in range of game.dna:
-        if d < 20:
-            gfx_rect of [10 + d * 8, game_h + 30, 6, 6, 100, 220, 255]
+    # Score and DNA
+    gfx_text of [250, game_h + 8, f"Score: {game.score}", 255, 255, 255, 2]
+    gfx_text of [250, game_h + 28, f"DNA: {game.dna}", 100, 220, 255, 2]
 
-    # Tier indicators
-    for t in range of game.scale_tier:
-        gfx_circle of [screen_w - 30 - t * 20, game_h + 20, 6, 255, 200, 50]
+    # Tier
+    gfx_text of [450, game_h + 8, f"Tier: {game.scale_tier}", 255, 200, 50, 2]
 
-    # Score
-    # (No text rendering yet — show score as bar)
-    score_w is floor of (game.score * 3)
-    if score_w > 200:
-        score_w is 200
-    gfx_rect of [10, game_h + 45, score_w, 8, 200, 200, 200]
+    # Upgrades hint
+    gfx_text of [450, game_h + 28, "1:Spd 2:Sns 3:Spk", 120, 120, 120, 1]
+
+    # Food eaten
+    gfx_text of [600, game_h + 8, f"Food: {game.food_eaten}", 60, 200, 60, 2]
+
+    # Speed/Sense/Spikes levels
+    gfx_text of [600, game_h + 28, f"S:{game.speed_level} N:{game.sense_level} K:{game.spikes_level}", 180, 180, 180, 1]
+
+    # Message
+    if (len of game.message) > 0:
+        gfx_text of [10, game_h + 45, game.message, 255, 255, 100, 2]
 
     gfx_present of null
