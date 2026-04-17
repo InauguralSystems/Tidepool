@@ -282,7 +282,7 @@ define game_tick(game) as:
         if game.scale_tier < SCALE_TIER_COUNT - 1:
             if (game.food_eaten % 10) == 0:
                 game.scale_tier is game.scale_tier + 1
-                game.message is f"Evolved to tier {game.scale_tier}!"
+                game.message is ""
 
     return game
 
@@ -304,17 +304,16 @@ define game_action(game, action) as:
             if game.dna >= 5:
                 game.dna is game.dna - 5
                 game.speed_level is game.speed_level + 1
-                game.message is f"Speed upgraded to {game.speed_level}"
+                game.message is ""
         case ACTION_BUY_SENSE:
             if game.dna >= 5:
                 game.dna is game.dna - 5
                 game.sense_level is game.sense_level + 1
-                game.message is f"Sense upgraded to {game.sense_level}"
         case ACTION_BUY_SPIKES:
             if game.dna >= 5:
                 game.dna is game.dna - 5
                 game.spikes_level is game.spikes_level + 1
-                game.message is f"Spikes upgraded to {game.spikes_level}"
+                game.message is ""
         case _:
             game.thrusting is 0
             game.braking is 0
