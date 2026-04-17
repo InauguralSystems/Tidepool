@@ -66,13 +66,10 @@ define render_game(game, screen_w, screen_h) as:
         wx is cam_x + (i - 6) * 3.0
         wy is cam_y + (sin of (wx * 0.3 + game.tick * 0.01)) * 5.0
         pos is world_to_screen of [wx, wy, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
-        if pos[0] > 0:
-            if pos[0] < screen_w:
-                if pos[1] > 0:
-                    if pos[1] < game_h:
-                        ex is floor of (pos[0] + cx_dir * 15)
-                        ey is floor of (pos[1] + cy_dir * 15)
-                        gfx_line of [pos[0], pos[1], ex, ey, 20, 35, 55]
+        if pos[0] > 0 and pos[0] < screen_w and pos[1] > 0 and pos[1] < game_h:
+            ex is floor of (pos[0] + cx_dir * 15)
+            ey is floor of (pos[1] + cy_dir * 15)
+            gfx_line of [pos[0], pos[1], ex, ey, 20, 35, 55]
 
     # Draw food
     for i in range of (len of game.food):
@@ -82,11 +79,8 @@ define render_game(game, screen_w, screen_h) as:
             dy is torus_delta of [cam_y, f.py, game.world_h]
             sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
             sy is floor of (game_h / 2 + dy * PIXELS_PER_UNIT)
-            if sx > -10:
-                if sx < screen_w + 10:
-                    if sy > -10:
-                        if sy < game_h + 10:
-                            gfx_circle of [sx, sy, 4, 60, 200, 60]
+            if sx > -10 and sx < screen_w + 10 and sy > -10 and sy < game_h + 10:
+                gfx_circle of [sx, sy, 4, 60, 200, 60]
 
     # Draw meat
     for i in range of (len of game.meat):
@@ -96,11 +90,8 @@ define render_game(game, screen_w, screen_h) as:
             dy is torus_delta of [cam_y, m.py, game.world_h]
             sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
             sy is floor of (game_h / 2 + dy * PIXELS_PER_UNIT)
-            if sx > -10:
-                if sx < screen_w + 10:
-                    if sy > -10:
-                        if sy < game_h + 10:
-                            gfx_circle of [sx, sy, 5, 180, 60, 60]
+            if sx > -10 and sx < screen_w + 10 and sy > -10 and sy < game_h + 10:
+                gfx_circle of [sx, sy, 5, 180, 60, 60]
 
     # Draw predators
     for i in range of (len of game.predators):
@@ -110,11 +101,8 @@ define render_game(game, screen_w, screen_h) as:
             dy is torus_delta of [cam_y, p.py, game.world_h]
             sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
             sy is floor of (game_h / 2 + dy * PIXELS_PER_UNIT)
-            if sx > -20:
-                if sx < screen_w + 20:
-                    if sy > -20:
-                        if sy < game_h + 20:
-                            draw_creature of [sx, sy, p.angle, p.radius, 200, 50, 50]
+            if sx > -20 and sx < screen_w + 20 and sy > -20 and sy < game_h + 20:
+                draw_creature of [sx, sy, p.angle, p.radius, 200, 50, 50]
 
     # Draw player
     p_sx is floor of (screen_w / 2)
