@@ -61,11 +61,11 @@ loop while running == 1:
                     case "right":
                         keys_held.right is 1
                     case "1":
-                        game is game_action of [game, ACTION_BUY_SPEED]
+                        game_action of [game, ACTION_BUY_SPEED]
                     case "2":
-                        game is game_action of [game, ACTION_BUY_SENSE]
+                        game_action of [game, ACTION_BUY_SENSE]
                     case "3":
-                        game is game_action of [game, ACTION_BUY_SPIKES]
+                        game_action of [game, ACTION_BUY_SPIKES]
                     case "escape":
                         running is 0
             case "keyup":
@@ -98,8 +98,8 @@ loop while running == 1:
     else:
         game.turning is 0
 
-    # Simulation tick
-    game is game_tick of game
+    # Simulation tick — mutates `game` in place
+    game_tick of game
 
     # Render
     try:

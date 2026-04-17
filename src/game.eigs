@@ -129,6 +129,8 @@ define player_turn_rate(game) as:
 # ============================================================
 # Core simulation tick
 # ============================================================
+# Mutates `game` in place. Returns `game` for convenience; callers
+# can discard the return value.
 
 define game_tick(game) as:
     if game.game_over == 1:
@@ -297,6 +299,7 @@ define game_tick(game) as:
 # ============================================================
 # Player actions
 # ============================================================
+# Mutates `game` in place. Returns `game` for convenience.
 
 define game_action(game, action) as:
     match action:

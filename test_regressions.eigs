@@ -22,15 +22,15 @@ for i in range of (len of game.predators):
 game.food_eaten is 10
 assert of [game.scale_tier == 0, "tier starts at 0"]
 
-game is game_tick of game
+game_tick of game
 assert of [game.scale_tier == 1, "tier bumps to 1 after first tick at food_eaten=10"]
 
 for i in range of 10:
-    game is game_tick of game
+    game_tick of game
 assert of [game.scale_tier == 1, "tier stays at 1 while food_eaten stays at 10"]
 
 game.food_eaten is 20
-game is game_tick of game
+game_tick of game
 assert of [game.scale_tier == 2, "tier bumps to 2 when food_eaten crosses 20"]
 
 print of "  tier progression: ok"
@@ -51,7 +51,7 @@ game.angle is 0.0
 game.thrusting is 0
 game.braking is 0
 
-game is game_tick of game
+game_tick of game
 assert of [game.px < 5.0, "player px wraps past world_w"]
 assert of [game.px >= 0.0, "player px stays non-negative after wrap"]
 
@@ -72,7 +72,7 @@ game.food[0].active is 1
 before_count is game.food_eaten
 before_energy is game.energy
 
-game is game_tick of game
+game_tick of game
 assert of [game.food_eaten == before_count + 1, "food at player position is eaten"]
 assert of [game.energy > before_energy, "eating food increases energy"]
 

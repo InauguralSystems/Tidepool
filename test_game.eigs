@@ -19,12 +19,12 @@ print of ""
 print of "Simulating 300 ticks with thrust..."
 for tick in range of 300:
     if tick < 100:
-        game is game_action of [game, ACTION_THRUST]
+        game_action of [game, ACTION_THRUST]
     elif tick < 200:
-        game is game_action of [game, ACTION_TURN_LEFT]
+        game_action of [game, ACTION_TURN_LEFT]
     else:
-        game is game_action of [game, ACTION_NONE]
-    game is game_tick of game
+        game_action of [game, ACTION_NONE]
+    game_tick of game
     if game.game_over == 1:
         print of f"Game over at tick {tick}: {game.message}"
         break
