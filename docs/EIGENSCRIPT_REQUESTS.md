@@ -36,6 +36,33 @@ game visibly stutters.
 Linux, `mach_absolute_time` on macOS, `QueryPerformanceCounter` on
 Windows. Return i64 nanoseconds. No allocation per call.
 
-## 2. (placeholder)
+## 2. Stdlib module resolution for external projects
+
+**Want**: `load_file of "lib/test.eigs"` (or `import test`) should find
+EigenScript's stdlib modules regardless of the caller's working directory.
+
+**Why**: `test_regressions.eigs` in Tidepool uses the bare `assert` builtin
+instead of `lib/test.eigs` because the load path only searches relative to
+the script file and CWD — neither of which is the EigenScript install
+directory when running a game.
+
+**Current state**: `load_file` resolution order is:
+1. Relative to CWD
+2. Relative to the script file's directory
+3. Relative to the script file's parent directory
+
+None of these find `~/EigenScript/lib/` when running `~/Tidepool/test.eigs`.
+
+**Impact**: any project outside the EigenScript tree can't use the stdlib
+test framework, format utilities, or any library module without copying
+files or symlinking.
+
+**Possible fixes**:
+- `EIGENSCRIPT_LIB` env var pointing to the stdlib directory
+- Bake the install prefix into the binary at compile time
+- `import` searches a known system path (e.g. `~/.local/lib/eigenscript/`)
+- Ship stdlib modules alongside the binary on `make install`
+
+## 3. (placeholder)
 
 Add further gaps here as they're hit.
