@@ -46,20 +46,10 @@ define draw_creature(sx, sy, angle, radius, r, g, b) as:
     gfx_line of [sx, sy, tip_x, tip_y, 255, 255, 255]
 
 # ============================================================
-# Main render function
+# Water current visualization — faint parallax lines.
 # ============================================================
 
-define render_game(game, screen_w, screen_h) as:
-    game_h is screen_h - HUD_HEIGHT
-
-    # Camera follows player
-    cam_x is game.px
-    cam_y is game.py
-
-    # Clear
-    gfx_clear of [BG_R, BG_G, BG_B]
-
-    # Water current visualization (subtle lines)
+define draw_water_current(game, cam_x, cam_y, screen_w, game_h) as:
     cx_dir is cos of game.current_angle
     cy_dir is sin of game.current_angle
     for i in range of 12:
@@ -71,6 +61,14 @@ define render_game(game, screen_w, screen_h) as:
             ey is floor of (pos[1] + cy_dir * 15)
             gfx_line of [pos[0], pos[1], ex, ey, 20, 35, 55]
 
+# ============================================================
+# World entities — food, meat, predators.
+# Inlines the world-to-screen math because the hot path runs
+# once per entity per frame; the call overhead shows up on
+# slow hardware.
+# ============================================================
+
+define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
     # Draw food
     for i in range of (len of game.food):
         f is game.food[i]
@@ -104,13 +102,16 @@ define render_game(game, screen_w, screen_h) as:
             if sx > -20 and sx < screen_w + 20 and sy > -20 and sy < game_h + 20:
                 draw_creature of [sx, sy, p.angle, p.radius, 200, 50, 50]
 
-    # Draw player
+# ============================================================
+# Player — always at screen center, plus spikes overlay.
+# ============================================================
+
+define draw_player(game, screen_w, game_h) as:
     p_sx is floor of (screen_w / 2)
     p_sy is floor of (game_h / 2)
     p_rad is player_radius of game
     draw_creature of [p_sx, p_sy, game.angle, p_rad + 0.3, 100, 200, 255]
 
-    # Spikes indicator
     if game.spikes_level > 0:
         for s in range of 6:
             spike_angle is game.angle + s * 1.047 - 2.618
@@ -119,10 +120,13 @@ define render_game(game, screen_w, screen_h) as:
             sy2 is floor of (p_sy + (sin of spike_angle) * spike_len)
             gfx_line of [p_sx, p_sy, sx2, sy2, 200, 200, 100]
 
-    # HUD background
-    gfx_rect of [0, game_h, screen_w, HUD_HEIGHT, 15, 15, 25]
+# ============================================================
+# HUD — background, energy bar, text readouts.
+# ============================================================
 
-    # HUD separator line
+define draw_hud(game, screen_w, game_h) as:
+    # Background and separator
+    gfx_rect of [0, game_h, screen_w, HUD_HEIGHT, 15, 15, 25]
     gfx_rect of [0, game_h, screen_w, 2, 60, 80, 120]
 
     # Energy bar
@@ -141,20 +145,30 @@ define render_game(game, screen_w, screen_h) as:
     gfx_text of [250, game_h + 8, f"Score: {game.score}", 255, 255, 255, 2]
     gfx_text of [250, game_h + 28, f"DNA: {game.dna}", 100, 220, 255, 2]
 
-    # Tier
+    # Tier and upgrade hint
     gfx_text of [450, game_h + 8, f"Tier: {game.scale_tier}", 255, 200, 50, 2]
-
-    # Upgrades hint
     gfx_text of [450, game_h + 28, "1:Spd 2:Sns 3:Spk", 120, 120, 120, 1]
 
-    # Food eaten
+    # Food eaten and upgrade levels
     gfx_text of [600, game_h + 8, f"Food: {game.food_eaten}", 60, 200, 60, 2]
-
-    # Speed/Sense/Spikes levels
     gfx_text of [600, game_h + 28, f"S:{game.speed_level} N:{game.sense_level} K:{game.spikes_level}", 180, 180, 180, 1]
 
     # Message
     if (len of game.message) > 0:
         gfx_text of [10, game_h + 45, game.message, 255, 255, 100, 2]
 
+# ============================================================
+# Main render function — orchestrates the frame.
+# ============================================================
+
+define render_game(game, screen_w, screen_h) as:
+    game_h is screen_h - HUD_HEIGHT
+    cam_x is game.px
+    cam_y is game.py
+
+    gfx_clear of [BG_R, BG_G, BG_B]
+    draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
+    draw_entities of [game, cam_x, cam_y, screen_w, game_h]
+    draw_player of [game, screen_w, game_h]
+    draw_hud of [game, screen_w, game_h]
     gfx_present of null
