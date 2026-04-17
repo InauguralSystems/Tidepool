@@ -107,13 +107,16 @@ loop while running == 1:
         print of f"Render error: {err}"
         running is 0
 
-    # Game over
+    # Game over — restart
     if game.game_over == 1:
-        # Flash red
         gfx_clear of [80, 10, 10]
         gfx_present of null
-        gfx_delay of 2000
-        running is 0
+        gfx_delay of 1500
+        game is new_game of [60.0, 30.0, random_int of [1, 99999]]
+        keys_held.thrust is 0
+        keys_held.brake is 0
+        keys_held.left is 0
+        keys_held.right is 0
 
     # Frame timing (vsync handles most of it)
     gfx_delay of 1
