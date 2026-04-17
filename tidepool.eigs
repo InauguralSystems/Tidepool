@@ -101,11 +101,17 @@ loop while running == 1:
     game is game_tick of game
 
     # Render
-    render_game of [game, WINDOW_W, WINDOW_H]
+    try:
+        render_game of [game, WINDOW_W, WINDOW_H]
+    catch err:
+        print of f"Render error: {err}"
+        running is 0
 
     # Game over
     if game.game_over == 1:
-        # Show for a moment then exit
+        # Flash red
+        gfx_clear of [80, 10, 10]
+        gfx_present of null
         gfx_delay of 2000
         running is 0
 
