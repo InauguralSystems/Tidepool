@@ -280,12 +280,11 @@ define game_tick(game) as:
     if game.jet_active > 0:
         game.jet_active is game.jet_active - 1
 
-    # Scale tier progression
-    if game.food_eaten >= 10:
-        if game.scale_tier < SCALE_TIER_COUNT - 1:
-            if (game.food_eaten % 10) == 0:
-                game.scale_tier is game.scale_tier + 1
-                game.message is ""
+    # Scale tier progression — one tier per 10 food eaten
+    if game.scale_tier < SCALE_TIER_COUNT - 1:
+        if game.food_eaten >= (game.scale_tier + 1) * 10:
+            game.scale_tier is game.scale_tier + 1
+            game.message is ""
 
     return game
 
@@ -317,10 +316,6 @@ define game_action(game, action) as:
                 game.dna is game.dna - 5
                 game.spikes_level is game.spikes_level + 1
                 game.message is ""
-        case _:
-            game.thrusting is 0
-            game.braking is 0
-            game.turning is 0
     return game
 
 # ============================================================

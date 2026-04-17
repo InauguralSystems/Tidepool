@@ -25,4 +25,4 @@ eigenscript test_game.eigs
 ## Status
 
 Game core ported from C — physics, entities, collisions, progression.
-Terminal renderer in progress.
+Playable with an SDL2 renderer, HUD, and keyboard input.

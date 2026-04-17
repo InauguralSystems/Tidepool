@@ -20,8 +20,10 @@ WINDOW_H is 600
 
 # Open window
 result is gfx_open of [WINDOW_W, WINDOW_H, "Tidepool"]
+running is 1
 if result == 0:
     print of "Failed to open graphics window"
+    running is 0
 
 # Create game
 game is new_game of [60.0, 30.0, 42]
@@ -33,7 +35,6 @@ keys_held is {
 }
 
 # Main game loop
-running is 1
 loop while running == 1:
     # Process all pending events
     ev is gfx_poll of null

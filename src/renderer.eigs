@@ -19,9 +19,9 @@ BG_B is 32
 # World-to-screen coordinate conversion
 # ============================================================
 
-define world_to_screen(wx, wy, cam_x, cam_y, screen_w, screen_h) as:
-    dx is torus_delta of [cam_x, wx, 0]
-    dy is torus_delta of [cam_y, wy, 0]
+define world_to_screen(wx, wy, cam_x, cam_y, screen_w, screen_h, world_w, world_h) as:
+    dx is torus_delta of [cam_x, wx, world_w]
+    dy is torus_delta of [cam_y, wy, world_h]
     sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
     sy is floor of (screen_h / 2 + dy * PIXELS_PER_UNIT)
     return [sx, sy]
@@ -65,7 +65,7 @@ define render_game(game, screen_w, screen_h) as:
     for i in range of 12:
         wx is cam_x + (i - 6) * 3.0
         wy is cam_y + (sin of (wx * 0.3 + game.tick * 0.01)) * 5.0
-        pos is world_to_screen of [wx, wy, cam_x, cam_y, screen_w, game_h]
+        pos is world_to_screen of [wx, wy, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
         if pos[0] > 0:
             if pos[0] < screen_w:
                 if pos[1] > 0:
