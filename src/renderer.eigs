@@ -1,129 +1,56 @@
 # ============================================================
-# Tidepool — Terminal Renderer (Fast)
+# Tidepool — Terminal Renderer (Native)
 # ============================================================
-# Projects entities onto a screen buffer, then dumps it.
-# O(entities) per frame instead of O(screen × entities).
+# Uses screen_render C builtin for fast terminal output.
+# Game logic builds entity list, C does the pixel work.
 
 load_file of "src/constants.eigs"
 
-ESC is chr of 27
-
-define ansi_clear as:
-    write of f"{ESC}[2J"
-
-define ansi_home as:
-    write of f"{ESC}[H"
-
-define ansi_goto(row, col) as:
-    write of f"{ESC}[{row};{col}H"
-
-define ansi_hide_cursor as:
-    write of f"{ESC}[?25l"
-
-define ansi_show_cursor as:
-    write of f"{ESC}[?25h"
-
 # ============================================================
-# Fast renderer — project entities to screen coords
+# Build renderable entity list from game state
 # ============================================================
 
 define render_game(game, screen_w, screen_h) as:
-    # View window centered on player
-    view_w is screen_w * 0.5
-    view_h is screen_h * 0.5
-    half_vw is view_w / 2.0
-    half_vh is view_h / 2.0
+    entities is []
 
-    # Build flat screen buffer: list of characters
-    buf_size is screen_w * screen_h
-    buf is []
-    colors is []
-    for i in range of buf_size:
-        append of [buf, " "]
-        append of [colors, 0]
-
-    # Helper: world coord to screen coord
-    # Returns [col, row] or null if off-screen
-    define to_screen(wx, wy) as:
-        dx is torus_delta of [game.px, wx, game.world_w]
-        dy is torus_delta of [game.py, wy, game.world_h]
-        col is floor of ((dx + half_vw) / view_w * screen_w)
-        row is floor of ((dy + half_vh) / view_h * screen_h)
-        if col >= 0:
-            if col < screen_w:
-                if row >= 0:
-                    if row < screen_h:
-                        return [col, row]
-        return null
-
-    # Project food
+    # Food — green dots
     for i in range of (len of game.food):
         f is game.food[i]
         if f.active == 1:
-            pos is to_screen of [f.px, f.py]
-            if pos != null:
-                idx is pos[1] * screen_w + pos[0]
-                set_at of [buf, idx, "."]
-                set_at of [colors, idx, 32]
+            append of [entities, [f.px, f.py, ".", 32]]
 
-    # Project meat
+    # Meat — magenta
     for i in range of (len of game.meat):
         m is game.meat[i]
         if m.active == 1:
-            pos is to_screen of [m.px, m.py]
-            if pos != null:
-                idx is pos[1] * screen_w + pos[0]
-                set_at of [buf, idx, "m"]
-                set_at of [colors, idx, 35]
+            append of [entities, [m.px, m.py, "m", 35]]
 
-    # Project predators (larger — draw multiple cells)
+    # Predators — red X
     for i in range of (len of game.predators):
         p is game.predators[i]
         if p.active == 1:
-            pos is to_screen of [p.px, p.py]
-            if pos != null:
-                idx is pos[1] * screen_w + pos[0]
-                set_at of [buf, idx, "X"]
-                set_at of [colors, idx, 31]
+            append of [entities, [p.px, p.py, "X", 31]]
 
-    # Project poison clouds
+    # Poison clouds — yellow
     for i in range of (len of game.poison_clouds):
         pc is game.poison_clouds[i]
         if pc.active == 1:
-            pos is to_screen of [pc.px, pc.py]
-            if pos != null:
-                idx is pos[1] * screen_w + pos[0]
-                set_at of [buf, idx, "*"]
-                set_at of [colors, idx, 33]
+            append of [entities, [pc.px, pc.py, "*", 33]]
 
-    # Project player (always center)
-    center_col is floor of (screen_w / 2)
-    center_row is floor of (screen_h / 2)
-    p_idx is center_row * screen_w + center_col
-    set_at of [buf, p_idx, "@"]
-    set_at of [colors, p_idx, 37]
+    # Player — white @, always rendered
+    append of [entities, [game.px, game.py, "@", 37]]
 
-    # Dump buffer to terminal
-    ansi_home of null
-    prev_color is 0
-    output is ""
-    for row in range of screen_h:
-        for col in range of screen_w:
-            idx is row * screen_w + col
-            c is colors[idx]
-            ch is buf[idx]
-            if c != prev_color:
-                output is output + f"{ESC}[{c}m"
-                prev_color is c
-            output is output + ch
-        output is output + "\n"
+    # Render all entities via C builtin
+    screen_render of [
+        entities, screen_w, screen_h,
+        game.px, game.py,
+        game.world_w, game.world_h
+    ]
 
-    write of output
-
-    # HUD
+    # HUD line
     status is game_status of game
-    hud is f"{ESC}[0m{ESC}[33m Energy:{status.energy} Score:{status.score} DNA:{status.dna} Tier:{status.tier} Food:{status.food_eaten}"
+    hud is f" E:{status.energy} S:{status.score} DNA:{status.dna} T:{status.tier} F:{status.food_eaten}"
     if (len of status.message) > 0:
         hud is hud + f" | {status.message}"
-    write of f"{hud}{ESC}[0m"
+    write of f"\033[33m{hud}\033[0m"
     flush of null
