@@ -53,6 +53,14 @@ define new_game(world_w, world_h, seed_val) as:
 
         # Scale tier
         "scale_tier": 0,
+        "tier_transition_timer": 0,
+
+        # Mating system
+        "mate_state": 0,
+        "mate_px": 0.0, "mate_py": 0.0,
+        "mate_vx": 0.0, "mate_vy": 0.0,
+        "mate_angle": 0.0,
+        "mate_timer": 0,
 
         # Water current
         "current_angle": 0.0,
@@ -148,6 +156,132 @@ define player_drag(game) as:
 
 define player_turn_rate(game) as:
     return creature_turn_rate of [game.creature, game.mass]
+
+# ============================================================
+# Mating system
+# ============================================================
+
+define mate_dna_threshold(game) as:
+    return 3 + game.scale_tier * 2
+
+define call_mate(game) as:
+    threshold is mate_dna_threshold of game
+    if game.mate_state != 0:
+        return null
+    if game.dna < threshold:
+        game.message is f"Need {threshold} DNA to call a mate."
+        return null
+    # Spawn mate 15-20 units away
+    spawn_dist is 15.0 + (random of null) * 5.0
+    angle is rand_range_f of [0 - PI, PI]
+    game.mate_px is wrap_coord of [game.px + (cos of angle) * spawn_dist, game.world_w]
+    game.mate_py is wrap_coord of [game.py + (sin of angle) * spawn_dist, game.world_h]
+    game.mate_vx is 0.0
+    game.mate_vy is 0.0
+    game.mate_angle is 0.0
+    game.mate_state is 2
+    game.mate_timer is 0
+    game.message is "Calling a mate..."
+
+define update_mate(game) as:
+    if game.mate_state < 2:
+        return null
+
+    dx is torus_delta of [game.mate_px, game.px, game.world_w]
+    dy is torus_delta of [game.mate_py, game.py, game.world_h]
+    dist is sqrt of (dx * dx + dy * dy)
+
+    if dist < 1.5:
+        game.mate_state is 3
+        game.message is "Mate arrived! Press E to evolve."
+        return null
+
+    # Steer mate toward player
+    target_angle is atan2 of [dy, dx]
+    diff is angle_diff of [game.mate_angle, target_angle]
+    max_turn is 4.0 * SIM_DT
+    if diff > max_turn:
+        diff is max_turn
+    elif diff < (0 - max_turn):
+        diff is 0 - max_turn
+    game.mate_angle is normalize_angle of (game.mate_angle + diff)
+
+    thrust is 10.0
+    drag is 3.0
+    cvx is (cos of game.current_angle) * CURRENT_SPEED
+    cvy is (sin of game.current_angle) * CURRENT_SPEED
+    game.mate_vx is game.mate_vx + (cos of game.mate_angle) * thrust * SIM_DT - game.mate_vx * drag * SIM_DT + cvx * SIM_DT
+    game.mate_vy is game.mate_vy + (sin of game.mate_angle) * thrust * SIM_DT - game.mate_vy * drag * SIM_DT + cvy * SIM_DT
+    speed is sqrt of (game.mate_vx * game.mate_vx + game.mate_vy * game.mate_vy)
+    if speed > 6.0:
+        game.mate_vx is game.mate_vx * 6.0 / speed
+        game.mate_vy is game.mate_vy * 6.0 / speed
+    game.mate_px is wrap_coord of [game.mate_px + game.mate_vx * SIM_DT, game.world_w]
+    game.mate_py is wrap_coord of [game.mate_py + game.mate_vy * SIM_DT, game.world_h]
+
+define evolve_tier_up(game) as:
+    if game.mate_state != 3:
+        return null
+    threshold is mate_dna_threshold of game
+    if game.dna < threshold:
+        game.message is f"Need {threshold} DNA to evolve."
+        return null
+    game.dna is game.dna - threshold
+    game.mate_state is 0
+
+    # Tier up
+    if game.scale_tier < SCALE_TIER_COUNT - 1:
+        game.scale_tier is game.scale_tier + 1
+    game.tier_transition_timer is 120
+    game.message is "A new world unfolds around you..."
+
+    # Respawn all predators with new species from fresh species pool
+    game.species is []
+    append of [game.species, new_species of [MOUTH_FILTER, 0, 1]]
+    for i in range of 3:
+        roll is random_int of [0, 9]
+        if roll < 4:
+            diet is MOUTH_FILTER
+            aggro is random_int of [0, 1]
+        elif roll < 8:
+            diet is MOUTH_JAW
+            aggro is random_int of [2, 3]
+        else:
+            diet is MOUTH_PROBOSCIS
+            aggro is random_int of [1, 2]
+        size is random_int of [1, 3]
+        append of [game.species, new_species of [diet, aggro, size]]
+
+    # Respawn predators
+    for i in range of (len of game.predators):
+        pred is game.predators[i]
+        pred.px is rand_range_f of [0, game.world_w]
+        pred.py is rand_range_f of [0, game.world_h]
+        pred.angle is rand_range_f of [0, 2.0 * PI]
+        sp_id is random_int of [0, 3]
+        pred.species_id is sp_id
+        pred.size is game.species[sp_id].base_size
+        pred.hp is pred.size + 1
+        pred.radius is 0.5 + pred.size * 0.3
+        pred.vx is 0.0
+        pred.vy is 0.0
+        pred.active is 1
+        pred.stunned_timer is 0
+        pred.spec is random_creature_spec of [game.scale_tier, game.species[sp_id].diet]
+        pred.spec.palette is game.species[sp_id].spec.palette
+        pred.spec.body_shape is game.species[sp_id].spec.body_shape
+        pred.spec.body_segments is clamp of [pred.size, 1, CREATURE_MAX_SEGMENTS]
+        pred.spec.mouth_type is game.species[sp_id].diet
+
+    # Spawn epic cells at higher tiers
+    if game.scale_tier >= 2 and (len of game.epic_cells) < 1:
+        cx is rand_range_f of [0, game.world_w]
+        cy is rand_range_f of [0, game.world_h]
+        epic is new_epic_cell of [cx, cy, EPIC_PATROL_RADIUS]
+        epic.spec.palette is random_int of [0, 4]
+        epic.spec.body_segments is 5
+        epic.spec.body_shape is SHAPE_SHELL
+        append of [game.epic_cells, epic]
 
 # ============================================================
 # Core simulation tick
@@ -361,6 +495,13 @@ define game_tick(game) as:
         if game.food_eaten >= (game.scale_tier + 1) * 10:
             game.scale_tier is game.scale_tier + 1
             game.message is ""
+
+    # Update mate approach
+    update_mate of game
+
+    # Tier transition countdown
+    if game.tier_transition_timer > 0:
+        game.tier_transition_timer is game.tier_transition_timer - 1
 
     return game
 
@@ -765,6 +906,10 @@ define game_action(game, action) as:
             activate_poison of game
         case ACTION_ELECTRIC:
             activate_electric of game
+        case ACTION_CALL_MATE:
+            call_mate of game
+        case ACTION_EVOLVE:
+            evolve_tier_up of game
     return game
 
 # ============================================================

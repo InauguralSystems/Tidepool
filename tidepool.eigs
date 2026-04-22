@@ -14,6 +14,7 @@
 
 load_file of "src/game.eigs"
 load_file of "src/renderer.eigs"
+load_file of "src/editor.eigs"
 import ui
 
 WINDOW_W is 800
@@ -26,6 +27,7 @@ STATE_DIET_CHOICE is 0
 STATE_PLAYING is 1
 STATE_PAUSED is 2
 STATE_GAME_OVER is 3
+STATE_EDITOR is 4
 
 # ============================================================
 # Open window
@@ -46,6 +48,26 @@ prev_tier is 0
 toast_text is ""
 toast_timer is 0
 tutorial_shown is 0
+
+# High score
+high_score is 0
+
+define load_high_score() as:
+    if file_exists of "saves/high_score.txt":
+        text is read_text of "saves/high_score.txt"
+        if (len of text) > 0:
+            return num of text
+    return 0
+
+define save_high_score(score) as:
+    existing is load_high_score of null
+    if score > existing:
+        mkdir of "saves"
+        write_text of ["saves/high_score.txt", f"{score}"]
+        return score
+    return existing
+
+high_score is load_high_score of null
 
 # Input state (held keys)
 keys_held is {
@@ -172,7 +194,7 @@ define build_pause_overlay() as:
 
     # Center box
     bw is 300
-    bh is 260
+    bh is 310
     bx is floor of ((WINDOW_W - bw) / 2)
     by is floor of ((WINDOW_H - bh) / 2)
 
@@ -193,10 +215,13 @@ define build_pause_overlay() as:
     resume_btn is ui.button of ["resume_btn", 75, 90, 150, 36, "Resume", null]
     ui.add_child of [box, resume_btn]
 
-    restart_btn is ui.button of ["restart_btn", 75, 140, 150, 36, "Restart", null]
+    editor_btn is ui.button of ["editor_btn", 75, 140, 150, 36, "Editor", null]
+    ui.add_child of [box, editor_btn]
+
+    restart_btn is ui.button of ["restart_btn", 75, 190, 150, 36, "Restart", null]
     ui.add_child of [box, restart_btn]
 
-    quit_btn is ui.button of ["quit_btn", 75, 190, 150, 36, "Quit", null]
+    quit_btn is ui.button of ["quit_btn", 75, 240, 150, 36, "Quit", null]
     ui.add_child of [box, quit_btn]
 
     ui.add_child of [root, box]
@@ -209,8 +234,8 @@ define build_gameover_overlay() as:
     root.bg is null
     root.border is null
 
-    bw is 400
-    bh is 340
+    bw is 420
+    bh is 400
     bx is floor of ((WINDOW_W - bw) / 2)
     by is floor of ((WINDOW_H - bh) / 2)
 
@@ -218,56 +243,81 @@ define build_gameover_overlay() as:
     box.bg is [40, 15, 15]
     box.border is [140, 40, 40]
 
-    title is ui.label of ["go_title", 0, 20, "GAME OVER"]
+    title is ui.label of ["go_title", 0, 15, "GAME OVER"]
     title.color is [220, 60, 60]
     title.scale is 4
-    # 9 chars * 24 = 216, offset = (400-216)/2 = 92
-    title.x is 92
+    title.x is floor of ((bw - 9 * 24) / 2)
     ui.add_child of [box, title]
 
-    sep is ui.separator of ["go_sep", 20, 68, 360, 0]
+    sep is ui.separator of ["go_sep", 20, 58, bw - 40, 0]
     ui.add_child of [box, sep]
 
-    reason is ui.label of ["go_reason", 30, 85, ""]
+    reason is ui.label of ["go_reason", 30, 72, ""]
     reason.color is [200, 160, 160]
     reason.scale is 2
     ui.add_child of [box, reason]
 
-    # Stats labels
-    score_lbl is ui.label of ["go_score", 30, 120, "Score: 0"]
+    # Left column stats
+    score_lbl is ui.label of ["go_score", 30, 100, "Score: 0"]
     score_lbl.color is [220, 220, 220]
     score_lbl.scale is 2
     ui.add_child of [box, score_lbl]
 
-    food_lbl is ui.label of ["go_food", 30, 148, "Food: 0"]
-    food_lbl.color is [100, 200, 100]
-    food_lbl.scale is 2
-    ui.add_child of [box, food_lbl]
+    hi_lbl is ui.label of ["go_hiscore", 30, 124, "Best: 0"]
+    hi_lbl.color is [255, 220, 100]
+    hi_lbl.scale is 2
+    ui.add_child of [box, hi_lbl]
 
-    tier_lbl is ui.label of ["go_tier", 30, 176, "Tier: 0"]
+    tier_lbl is ui.label of ["go_tier", 30, 152, "Tier: 0"]
     tier_lbl.color is [255, 200, 50]
     tier_lbl.scale is 2
     ui.add_child of [box, tier_lbl]
 
-    dna_lbl is ui.label of ["go_dna", 30, 204, "DNA: 0"]
+    dna_lbl is ui.label of ["go_dna", 30, 176, "DNA: 0"]
     dna_lbl.color is [100, 200, 255]
     dna_lbl.scale is 2
     ui.add_child of [box, dna_lbl]
 
-    upgrades_lbl is ui.label of ["go_upgrades", 220, 120, ""]
+    # Right column stats
+    food_lbl is ui.label of ["go_food", 230, 100, "Plants: 0"]
+    food_lbl.color is [100, 200, 100]
+    food_lbl.scale is 2
+    ui.add_child of [box, food_lbl]
+
+    meat_lbl is ui.label of ["go_meat", 230, 124, "Meat: 0"]
+    meat_lbl.color is [200, 100, 100]
+    meat_lbl.scale is 2
+    ui.add_child of [box, meat_lbl]
+
+    upgrades_lbl is ui.label of ["go_upgrades", 230, 152, ""]
     upgrades_lbl.color is [180, 180, 200]
     upgrades_lbl.scale is 2
     ui.add_child of [box, upgrades_lbl]
 
-    time_lbl is ui.label of ["go_time", 220, 148, ""]
+    time_lbl is ui.label of ["go_time", 230, 176, ""]
     time_lbl.color is [180, 180, 200]
     time_lbl.scale is 2
     ui.add_child of [box, time_lbl]
 
-    restart_btn is ui.button of ["go_restart_btn", 50, 260, 140, 36, "Play Again", null]
+    # New best indicator (hidden by default)
+    newbest_lbl is ui.label of ["go_newbest", 0, 210, ""]
+    newbest_lbl.color is [255, 255, 80]
+    newbest_lbl.scale is 3
+    ui.add_child of [box, newbest_lbl]
+
+    sep2 is ui.separator of ["go_sep2", 20, 240, bw - 40, 0]
+    ui.add_child of [box, sep2]
+
+    # Hint
+    hint is ui.label of ["go_hint", 30, 252, "M to call mate  E to edit/evolve"]
+    hint.color is [100, 110, 130]
+    hint.scale is 1
+    ui.add_child of [box, hint]
+
+    restart_btn is ui.button of ["go_restart_btn", 50, 310, 140, 36, "Play Again", null]
     ui.add_child of [box, restart_btn]
 
-    quit_btn is ui.button of ["go_quit_btn", 210, 260, 140, 36, "Quit", null]
+    quit_btn is ui.button of ["go_quit_btn", 230, 310, 140, 36, "Quit", null]
     ui.add_child of [box, quit_btn]
 
     ui.add_child of [root, box]
@@ -384,10 +434,11 @@ define update_hud(g) as:
     if score_w != null:
         score_w.text is f"Score: {g.score}"
 
-    # DNA
+    # DNA (show mate threshold)
     dna_w is ui.find_by_id of [hud_panel, "hud_dna"]
     if dna_w != null:
-        dna_w.text is f"DNA: {g.dna}"
+        threshold is mate_dna_threshold of g
+        dna_w.text is f"DNA: {g.dna}/{threshold}"
 
     # Tier
     tier_w is ui.find_by_id of [hud_panel, "hud_tier"]
@@ -464,13 +515,21 @@ define update_gameover_overlay(g) as:
     if score_w != null:
         score_w.text is f"Score: {g.score}"
 
+    hi_w is ui.find_by_id of [gameover_overlay, "go_hiscore"]
+    if hi_w != null:
+        hi_w.text is f"Best: {high_score}"
+
     food_w is ui.find_by_id of [gameover_overlay, "go_food"]
     if food_w != null:
-        food_w.text is f"Food eaten: {g.food_eaten}"
+        food_w.text is f"Plants: {g.plants_eaten}"
+
+    meat_w is ui.find_by_id of [gameover_overlay, "go_meat"]
+    if meat_w != null:
+        meat_w.text is f"Meat: {g.meat_eaten}"
 
     tier_w is ui.find_by_id of [gameover_overlay, "go_tier"]
     if tier_w != null:
-        tier_w.text is f"Final tier: {g.scale_tier}"
+        tier_w.text is f"Tier: {g.scale_tier}"
 
     dna_w is ui.find_by_id of [gameover_overlay, "go_dna"]
     if dna_w != null:
@@ -478,12 +537,20 @@ define update_gameover_overlay(g) as:
 
     upgrades_w is ui.find_by_id of [gameover_overlay, "go_upgrades"]
     if upgrades_w != null:
-        upgrades_w.text is f"Spd:{g.speed_level} Sns:{g.sense_level} Spk:{g.spikes_level}"
+        upgrades_w.text is f"S:{g.speed_level} N:{g.sense_level} K:{g.spikes_level}"
 
     time_w is ui.find_by_id of [gameover_overlay, "go_time"]
     if time_w != null:
         secs is floor of (g.tick / 60)
-        time_w.text is f"Survived: {secs}s"
+        time_w.text is f"Time: {secs}s"
+
+    newbest_w is ui.find_by_id of [gameover_overlay, "go_newbest"]
+    if newbest_w != null:
+        if g.score >= high_score and g.score > 0:
+            newbest_w.text is "NEW HIGH SCORE!"
+            newbest_w.x is floor of ((420 - 15 * 18) / 2)
+        else:
+            newbest_w.text is ""
 
 # ============================================================
 # Start a new game with the chosen diet
@@ -631,7 +698,18 @@ loop while running == 1:
                         case "p":
                             game_action of [game, ACTION_POISON]
                         case "e":
-                            game_action of [game, ACTION_ELECTRIC]
+                            # If mate is waiting, evolve; otherwise open editor
+                            if game.mate_state == 3:
+                                game_action of [game, ACTION_EVOLVE]
+                                toast_text is f"EVOLVED! Now Tier {game.scale_tier}"
+                                toast_timer is 120
+                                prev_tier is game.scale_tier
+                            else:
+                                # Open creature editor
+                                editor_open of [game.creature, WINDOW_W, WINDOW_H]
+                                game_state is STATE_EDITOR
+                        case "m":
+                            game_action of [game, ACTION_CALL_MATE]
                         case "escape":
                             game_state is STATE_PAUSED
                 elif game_state == STATE_PAUSED:
@@ -643,6 +721,10 @@ loop while running == 1:
                         game is null
                     if ev.key == "return":
                         game is start_game of 0
+                        game_state is STATE_PLAYING
+                elif game_state == STATE_EDITOR:
+                    if ev.key == "escape":
+                        editor_close of null
                         game_state is STATE_PLAYING
                 elif game_state == STATE_DIET_CHOICE:
                     if ev.key == "escape":
@@ -679,6 +761,9 @@ loop while running == 1:
                 elif game_state == STATE_PAUSED:
                     if (check_button_click of [pause_overlay, mx, my, "resume_btn"]) == 1:
                         game_state is STATE_PLAYING
+                    elif (check_button_click of [pause_overlay, mx, my, "editor_btn"]) == 1:
+                        editor_open of [game.creature, WINDOW_W, WINDOW_H]
+                        game_state is STATE_EDITOR
                     elif (check_button_click of [pause_overlay, mx, my, "restart_btn"]) == 1:
                         game_state is STATE_DIET_CHOICE
                         game is null
@@ -689,6 +774,23 @@ loop while running == 1:
                         game_state is STATE_DIET_CHOICE
                     elif (check_button_click of [gameover_overlay, mx, my, "go_quit_btn"]) == 1:
                         running is 0
+                elif game_state == STATE_EDITOR:
+                    if _editor_root != null:
+                        # Check Done/Cancel
+                        if (check_button_click of [_editor_root, mx, my, "ed_done"]) == 1:
+                            editor_apply_to_spec of game.creature
+                            editor_close of null
+                            game_state is STATE_PLAYING
+                        elif (check_button_click of [_editor_root, mx, my, "ed_cancel"]) == 1:
+                            editor_close of null
+                            game_state is STATE_PLAYING
+                        else:
+                            # Check part buttons
+                            for pi in range of 8:
+                                if (check_button_click of [_editor_root, mx, my, f"ed_part_{pi}"]) == 1:
+                                    editor_handle_part_click of [pi, _editor_spec]
+                            # Let UI dispatch handle dropdowns/spinboxes
+                            ui.dispatch of [_editor_root, ev]
                 elif game_state == STATE_PLAYING:
                     # HUD button clicks
                     if (check_button_click of [hud_panel, mx, my, "hud_spd"]) == 1:
@@ -701,7 +803,10 @@ loop while running == 1:
                 # Update button hover states for whichever overlay is active
                 mx is ev.x
                 my is ev.y
-                if game_state == STATE_DIET_CHOICE:
+                if game_state == STATE_EDITOR:
+                    if _editor_root != null:
+                        ui.dispatch of [_editor_root, ev]
+                elif game_state == STATE_DIET_CHOICE:
                     ui.dispatch of [diet_overlay, ev]
                 elif game_state == STATE_PAUSED:
                     ui.dispatch of [pause_overlay, ev]
@@ -725,9 +830,13 @@ loop while running == 1:
                 toast_text is f"TIER UP! Now Tier {game.scale_tier}"
                 toast_timer is 120
                 prev_tier is game.scale_tier
+                # Spawn tier-up particle burst
+                for _ti in range of 15:
+                    spawn_death_burst of [game.px, game.py, game.creature.palette]
 
             # Check for game over transition
             if game.game_over == 1:
+                high_score is save_high_score of game.score
                 update_gameover_overlay of game
                 game_state is STATE_GAME_OVER
 
@@ -762,6 +871,11 @@ loop while running == 1:
             gfx_rect of [0, 0, WINDOW_W, WINDOW_H, 0, 0, 0, 140]
             ui.render of [pause_overlay, 0, 0]
             gfx_present of null
+
+    elif game_state == STATE_EDITOR:
+        gfx_clear of [12, 18, 30]
+        editor_render of [WINDOW_W, WINDOW_H]
+        gfx_present of null
 
     elif game_state == STATE_GAME_OVER:
         if game != null:

@@ -1,0 +1,308 @@
+# ============================================================
+# Tidepool — Creature Editor
+# ============================================================
+# Modal full-screen editor for customising the player creature.
+# Uses the UI toolkit widgets.
+
+load_file of "src/constants.eigs"
+load_file of "src/entities.eigs"
+import ui
+
+# ============================================================
+# Editor state
+# ============================================================
+
+_editor_active is 0
+_editor_root is null
+_editor_spec is null
+_editor_preview_tick is 0
+
+# ============================================================
+# Build the editor UI tree
+# ============================================================
+
+define build_editor_ui(screen_w, screen_h) as:
+    root is ui.panel of ["ed_root", 0, 0, screen_w, screen_h]
+    root.bg is [12, 18, 30]
+    root.border is null
+
+    # Title bar
+    title is ui.label of ["ed_title", 0, 10, "CREATURE EDITOR"]
+    title.color is [220, 220, 240]
+    title.scale is 3
+    title.x is floor of ((screen_w - 15 * 18) / 2)
+    ui.add_child of [root, title]
+
+    sep is ui.separator of ["ed_sep_top", 20, 40, screen_w - 40, 0]
+    ui.add_child of [root, sep]
+
+    # ---- Left panel: Part selection ----
+    left is ui.panel of ["ed_left", 10, 55, 180, screen_h - 120]
+    left.bg is [18, 24, 38]
+    left.border is [40, 50, 70]
+
+    parts_title is ui.label of ["ed_parts_title", 10, 8, "PARTS"]
+    parts_title.color is [160, 170, 200]
+    parts_title.scale is 2
+    ui.add_child of [left, parts_title]
+
+    part_names is ["Eye", "Spike", "Fin", "Claw", "Cilia", "Poison", "Electric", "Jet"]
+    for i in range of (len of part_names):
+        btn is ui.button of [f"ed_part_{i}", 10, 34 + i * 30, 160, 24, part_names[i], null]
+        ui.add_child of [left, btn]
+
+    ui.add_child of [root, left]
+
+    # ---- Center: Preview area ----
+    center is ui.panel of ["ed_center", 200, 55, screen_w - 410, screen_h - 120]
+    center.bg is [8, 14, 28]
+    center.border is [30, 40, 60]
+
+    preview_title is ui.label of ["ed_preview_title", 10, 8, "PREVIEW"]
+    preview_title.color is [140, 150, 180]
+    preview_title.scale is 2
+    ui.add_child of [center, preview_title]
+
+    # The preview area will be drawn with custom rendering (not a canvas widget)
+
+    ui.add_child of [root, center]
+
+    # ---- Right panel: Properties ----
+    right is ui.panel of ["ed_right", screen_w - 200, 55, 190, screen_h - 120]
+    right.bg is [18, 24, 38]
+    right.border is [40, 50, 70]
+
+    prop_title is ui.label of ["ed_prop_title", 10, 8, "PROPERTIES"]
+    prop_title.color is [160, 170, 200]
+    prop_title.scale is 2
+    ui.add_child of [right, prop_title]
+
+    # Palette dropdown
+    pal_lbl is ui.label of ["ed_pal_lbl", 10, 35, "Palette:"]
+    pal_lbl.color is [140, 150, 170]
+    pal_lbl.scale is 1
+    ui.add_child of [right, pal_lbl]
+
+    pal_items is ["Lagoon", "Ember", "Orchid", "Lichen", "Sunrise"]
+    pal_dd is ui.dropdown of ["ed_palette", 10, 48, 170, pal_items, 0, null]
+    ui.add_child of [right, pal_dd]
+
+    # Shape radio group
+    shape_lbl is ui.label of ["ed_shape_lbl", 10, 80, "Shape:"]
+    shape_lbl.color is [140, 150, 170]
+    shape_lbl.scale is 1
+    ui.add_child of [right, shape_lbl]
+
+    shape_items is ["Orb", "Wide", "Tall", "Shell"]
+    shape_rg is ui.radio_group of ["ed_shape", 10, 93, shape_items, 0, null]
+    ui.add_child of [right, shape_rg]
+
+    # Segments spinbox
+    seg_lbl is ui.label of ["ed_seg_lbl", 10, 165, "Segments:"]
+    seg_lbl.color is [140, 150, 170]
+    seg_lbl.scale is 1
+    ui.add_child of [right, seg_lbl]
+
+    seg_sb is ui.spinbox of ["ed_segments", 10, 178, 170, 1, 7, 3, 1, null]
+    ui.add_child of [right, seg_sb]
+
+    # Pattern dropdown
+    pat_lbl is ui.label of ["ed_pat_lbl", 10, 210, "Pattern:"]
+    pat_lbl.color is [140, 150, 170]
+    pat_lbl.scale is 1
+    ui.add_child of [right, pat_lbl]
+
+    pat_items is ["Plain", "Spots", "Stripes", "Core"]
+    pat_dd is ui.dropdown of ["ed_pattern", 10, 223, 170, pat_items, 0, null]
+    ui.add_child of [right, pat_dd]
+
+    # Mouth dropdown
+    mth_lbl is ui.label of ["ed_mth_lbl", 10, 255, "Mouth:"]
+    mth_lbl.color is [140, 150, 170]
+    mth_lbl.scale is 1
+    ui.add_child of [right, mth_lbl]
+
+    mth_items is ["Filter", "Jaw", "Proboscis"]
+    mth_dd is ui.dropdown of ["ed_mouth", 10, 268, 170, mth_items, 0, null]
+    ui.add_child of [right, mth_dd]
+
+    ui.add_child of [root, right]
+
+    # ---- Bottom: Done / Cancel buttons ----
+    done_btn is ui.button of ["ed_done", screen_w / 2 - 120, screen_h - 55, 100, 36, "Done", null]
+    ui.add_child of [root, done_btn]
+
+    cancel_btn is ui.button of ["ed_cancel", screen_w / 2 + 20, screen_h - 55, 100, 36, "Cancel", null]
+    ui.add_child of [root, cancel_btn]
+
+    return root
+
+# ============================================================
+# Open / close editor
+# ============================================================
+
+define editor_open(spec, screen_w, screen_h) as:
+    _editor_active is 1
+    _editor_spec is spec
+    _editor_preview_tick is 0
+    _editor_root is build_editor_ui of [screen_w, screen_h]
+    # Sync current spec values into widgets
+    editor_sync_widgets_from_spec of spec
+
+define editor_close() as:
+    _editor_active is 0
+    _editor_root is null
+
+define editor_is_active() as:
+    return _editor_active
+
+# ============================================================
+# Sync widget values from spec
+# ============================================================
+
+define editor_sync_widgets_from_spec(spec) as:
+    if _editor_root == null:
+        return null
+
+    pal_w is ui.find_by_id of [_editor_root, "ed_palette"]
+    if pal_w != null:
+        pal_w.selected is spec.palette
+
+    shape_w is ui.find_by_id of [_editor_root, "ed_shape"]
+    if shape_w != null:
+        shape_w.selected is spec.body_shape
+
+    seg_w is ui.find_by_id of [_editor_root, "ed_segments"]
+    if seg_w != null:
+        seg_w.value is spec.body_segments
+
+    pat_w is ui.find_by_id of [_editor_root, "ed_pattern"]
+    if pat_w != null:
+        pat_w.selected is spec.pattern
+
+    mth_w is ui.find_by_id of [_editor_root, "ed_mouth"]
+    if mth_w != null:
+        mth_w.selected is spec.mouth_type
+
+# ============================================================
+# Apply widget values back to spec
+# ============================================================
+
+define editor_apply_to_spec(spec) as:
+    if _editor_root == null:
+        return null
+
+    pal_w is ui.find_by_id of [_editor_root, "ed_palette"]
+    if pal_w != null:
+        spec.palette is pal_w.selected
+
+    shape_w is ui.find_by_id of [_editor_root, "ed_shape"]
+    if shape_w != null:
+        spec.body_shape is shape_w.selected
+
+    seg_w is ui.find_by_id of [_editor_root, "ed_segments"]
+    if seg_w != null:
+        spec.body_segments is clamp of [seg_w.value, 1, CREATURE_MAX_SEGMENTS]
+
+    pat_w is ui.find_by_id of [_editor_root, "ed_pattern"]
+    if pat_w != null:
+        spec.pattern is pat_w.selected
+
+    mth_w is ui.find_by_id of [_editor_root, "ed_mouth"]
+    if mth_w != null:
+        spec.mouth_type is mth_w.selected
+
+    # Clamp anchors to valid segment range
+    max_seg is spec.body_segments - 1
+    for i in range of CREATURE_MAX_SOCKETS:
+        if spec.eye_anchor[i] > max_seg:
+            spec.eye_anchor[i] is max_seg
+        if spec.spike_anchor[i] > max_seg:
+            spec.spike_anchor[i] is max_seg
+        if spec.appendage_anchor[i] > max_seg:
+            spec.appendage_anchor[i] is max_seg
+
+# ============================================================
+# Handle part button clicks
+# ============================================================
+
+define editor_handle_part_click(part_index, spec) as:
+    # Part buttons toggle appendages on socket pairs
+    # part_index: 0=Eye, 1=Spike, 2=Fin, 3=Claw, 4=Cilia, 5=Poison, 6=Electric, 7=Jet
+    max_sockets is spec.body_segments * 2
+    if max_sockets > CREATURE_MAX_SOCKETS:
+        max_sockets is CREATURE_MAX_SOCKETS
+
+    if part_index == 0:
+        # Toggle eyes: find first inactive pair and enable, or disable last active pair
+        toggled is 0
+        for i in range of max_sockets:
+            if spec.eyes[i] == 0 and toggled == 0:
+                spec.eyes[i] is 1
+                toggled is 1
+        if toggled == 0:
+            # All on — turn off last pair
+            i is max_sockets - 1
+            loop while i >= 0:
+                if spec.eyes[i] == 1:
+                    spec.eyes[i] is 0
+                    break
+                i is i - 1
+    elif part_index == 1:
+        # Toggle spikes
+        toggled is 0
+        for i in range of max_sockets:
+            if spec.spikes[i] == 0 and toggled == 0:
+                spec.spikes[i] is 1
+                toggled is 1
+        if toggled == 0:
+            i is max_sockets - 1
+            loop while i >= 0:
+                if spec.spikes[i] == 1:
+                    spec.spikes[i] is 0
+                    break
+                i is i - 1
+    else:
+        # Appendage types: 2=Fin(1), 3=Claw(2), 4=Cilia(3), 5=Poison(4), 6=Electric(5), 7=Jet(6)
+        app_type is part_index - 1
+        # Find first empty appendage slot and set it
+        placed is 0
+        for i in range of max_sockets:
+            if spec.appendages[i] == APPENDAGE_NONE and placed == 0:
+                spec.appendages[i] is app_type
+                placed is 1
+        if placed == 0:
+            # All slots full — replace first slot that has this type (toggle off)
+            for i in range of max_sockets:
+                if spec.appendages[i] == app_type:
+                    spec.appendages[i] is APPENDAGE_NONE
+                    break
+
+# ============================================================
+# Render editor
+# ============================================================
+
+define editor_render(screen_w, screen_h) as:
+    if _editor_root == null:
+        return null
+    _editor_preview_tick is _editor_preview_tick + 1
+
+    # Render UI tree
+    ui.render of [_editor_root, 0, 0]
+
+    # Draw creature preview in center area
+    center_w is ui.find_by_id of [_editor_root, "ed_center"]
+    if center_w != null and _editor_spec != null:
+        # Preview position: center of the center panel
+        preview_x is 200 + floor of ((screen_w - 410) / 2)
+        preview_y is 55 + floor of ((screen_h - 120) / 2)
+        draw_creature_body of [_editor_spec, preview_x, preview_y, 0 - 1.57, 24, _editor_preview_tick, 0]
+
+# ============================================================
+# Dispatch editor events
+# ============================================================
+
+define editor_dispatch(ev) as:
+    if _editor_root == null:
+        return null
+    ui.dispatch of [_editor_root, ev]

@@ -7,13 +7,51 @@ load_file of "src/constants.eigs"
 load_file of "src/math_utils.eigs"
 
 # Rendering constants
-PIXELS_PER_UNIT is 20
 HUD_HEIGHT is 60
+
+# Dynamic camera zoom state
+_cam_ppu is 20.0
+_cam_ppu_target is 20.0
 
 # Color palette
 BG_R is 8
 BG_G is 16
 BG_B is 32
+
+# ============================================================
+# Dynamic camera zoom
+# ============================================================
+
+define update_camera_zoom(game) as:
+    tier_ppu is [28, 24, 20, 17, 14]
+    tier is clamp of [game.scale_tier, 0, 4]
+    ppu is tier_ppu[tier]
+    ppu is ppu / (1.0 + game.mass * 0.008)
+    # Dramatic zoom-out during tier transition
+    if game.tier_transition_timer > 60:
+        ppu is ppu * 0.7
+    if ppu < 10.0:
+        ppu is 10.0
+    _cam_ppu_target is ppu
+    # Smooth interpolation
+    _cam_ppu is _cam_ppu + (_cam_ppu_target - _cam_ppu) * 0.03
+
+define get_ppu() as:
+    return _cam_ppu
+
+# ============================================================
+# Caustic light background
+# ============================================================
+
+define draw_caustics(screen_w, game_h, tick) as:
+    for i in range of 6:
+        y_base is game_h / 2 + (sin of (tick * 0.02 + i * 1.5)) * (game_h * 0.3)
+        for x_step in range of (floor of (screen_w / 8)):
+            px is x_step * 8
+            py is y_base + (sin of (px * 0.03 + tick * 0.04 + i)) * 8
+            px2 is px + 8
+            py2 is y_base + (sin of (px2 * 0.03 + tick * 0.04 + i)) * 8
+            gfx_line of [px, floor of py, px2, floor of py2, 20, 35, 50]
 
 # ============================================================
 # Particle system — lightweight effect particles
@@ -115,8 +153,8 @@ define spawn_collision_flash(x, y) as:
 define world_to_screen(wx, wy, cam_x, cam_y, screen_w, screen_h, world_w, world_h) as:
     dx is torus_delta of [cam_x, wx, world_w]
     dy is torus_delta of [cam_y, wy, world_h]
-    sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
-    sy is floor of (screen_h / 2 + dy * PIXELS_PER_UNIT)
+    sx is floor of (screen_w / 2 + dx * _cam_ppu)
+    sy is floor of (screen_h / 2 + dy * _cam_ppu)
     return [sx, sy]
 
 # ============================================================
@@ -322,7 +360,7 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
 # ============================================================
 
 define draw_creature(sx, sy, angle, radius, r, g, b) as:
-    px_radius is floor of (radius * PIXELS_PER_UNIT)
+    px_radius is floor of (radius * _cam_ppu)
     if px_radius < 3:
         px_radius is 3
 
@@ -363,8 +401,8 @@ define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
         if f.active == 1:
             dx is torus_delta of [cam_x, f.px, game.world_w]
             dy is torus_delta of [cam_y, f.py, game.world_h]
-            sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
-            sy is floor of (game_h / 2 + dy * PIXELS_PER_UNIT)
+            sx is floor of (screen_w / 2 + dx * _cam_ppu)
+            sy is floor of (game_h / 2 + dy * _cam_ppu)
             if sx > -10 and sx < screen_w + 10 and sy > -10 and sy < game_h + 10:
                 gfx_circle of [sx, sy, 4, 60, 200, 60]
 
@@ -374,8 +412,8 @@ define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
         if m.active == 1:
             dx is torus_delta of [cam_x, m.px, game.world_w]
             dy is torus_delta of [cam_y, m.py, game.world_h]
-            sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
-            sy is floor of (game_h / 2 + dy * PIXELS_PER_UNIT)
+            sx is floor of (screen_w / 2 + dx * _cam_ppu)
+            sy is floor of (game_h / 2 + dy * _cam_ppu)
             if sx > -10 and sx < screen_w + 10 and sy > -10 and sy < game_h + 10:
                 gfx_circle of [sx, sy, 5, 180, 60, 60]
 
@@ -385,8 +423,8 @@ define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
         if p.active == 1:
             dx is torus_delta of [cam_x, p.px, game.world_w]
             dy is torus_delta of [cam_y, p.py, game.world_h]
-            sx is floor of (screen_w / 2 + dx * PIXELS_PER_UNIT)
-            sy is floor of (game_h / 2 + dy * PIXELS_PER_UNIT)
+            sx is floor of (screen_w / 2 + dx * _cam_ppu)
+            sy is floor of (game_h / 2 + dy * _cam_ppu)
             if sx > -20 and sx < screen_w + 20 and sy > -20 and sy < game_h + 20:
                 pred_radius is clamp of [floor of (8 + p.size * 4), 6, 24]
                 # LOD: very small on screen -> simple circle
@@ -407,7 +445,7 @@ define draw_combat_entities(game, cam_x, cam_y, screen_w, game_h) as:
         if pc.active == 1:
             pos is world_to_screen of [pc.px, pc.py, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
             if pos[0] > -80 and pos[0] < screen_w + 80 and pos[1] > -80 and pos[1] < game_h + 80:
-                px_r is floor of (pc.radius * PIXELS_PER_UNIT)
+                px_r is floor of (pc.radius * _cam_ppu)
                 if px_r < 2:
                     px_r is 2
                 # Multiple concentric rings for cloud effect
@@ -439,14 +477,14 @@ define draw_combat_entities(game, cam_x, cam_y, screen_w, game_h) as:
         if e.active == 1:
             pos is world_to_screen of [e.px, e.py, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
             if pos[0] > -100 and pos[0] < screen_w + 100 and pos[1] > -100 and pos[1] < game_h + 100:
-                px_r is floor of (e.radius * PIXELS_PER_UNIT)
+                px_r is floor of (e.radius * _cam_ppu)
                 # Pulse effect
                 pulse is (sin of (game.tick * 0.05)) * 3
                 px_r is px_r + floor of pulse
                 # Draw with creature body for visual richness
                 draw_creature_body of [e.spec, pos[0], pos[1], e.angle, px_r, game.tick, 0]
                 # Suction ring indicator
-                ring_r is floor of (EPIC_SUCTION_RADIUS * PIXELS_PER_UNIT)
+                ring_r is floor of (EPIC_SUCTION_RADIUS * _cam_ppu)
                 # Draw faint ring at suction radius using points
                 ring_segs is 24
                 for rs in range of ring_segs:
@@ -502,8 +540,60 @@ define draw_player(game, screen_w, game_h) as:
     p_sx is floor of (screen_w / 2)
     p_sy is floor of (game_h / 2)
     p_rad is creature_radius of [game.creature, game.mass]
-    px_rad is clamp of [floor of (p_rad * PIXELS_PER_UNIT), 8, 40]
+    px_rad is clamp of [floor of (p_rad * _cam_ppu), 8, 40]
     draw_creature_body of [game.creature, p_sx, p_sy, game.angle, px_rad, game.tick, game.spikes_level]
+
+# ============================================================
+# Draw mate entity
+# ============================================================
+
+define draw_mate(game, cam_x, cam_y, screen_w, game_h) as:
+    if game.mate_state < 2:
+        return null
+    dx is torus_delta of [cam_x, game.mate_px, game.world_w]
+    dy is torus_delta of [cam_y, game.mate_py, game.world_h]
+    sx is floor of (screen_w / 2 + dx * _cam_ppu)
+    sy is floor of (game_h / 2 + dy * _cam_ppu)
+    if sx > -40 and sx < screen_w + 40 and sy > -40 and sy < game_h + 40:
+        # Use player's spec but with a different palette (+2 mod 5)
+        mate_spec is game.creature
+        mate_pal is (game.creature.palette + 2) % 5
+        p_rad is creature_radius of [game.creature, game.mass]
+        px_rad is clamp of [floor of (p_rad * _cam_ppu), 8, 40]
+        # Draw mate with shifted palette
+        orig_pal is mate_spec.palette
+        mate_spec.palette is mate_pal
+        draw_creature_body of [mate_spec, sx, sy, game.mate_angle, px_rad, game.tick, 0]
+        mate_spec.palette is orig_pal
+        # Heart indicator if arrived
+        if game.mate_state == 3:
+            pulse is (sin of (game.tick * 0.1)) * 2
+            gfx_circle of [sx, sy - px_rad - 8, floor of (3 + pulse), 255, 100, 150]
+
+# ============================================================
+# Tier transition visual effect
+# ============================================================
+
+define draw_tier_transition(game, screen_w, game_h) as:
+    if game.tier_transition_timer <= 0:
+        return null
+    pcx is floor of (screen_w / 2)
+    pcy is floor of (game_h / 2)
+    t_progress is 1.0 - game.tier_transition_timer / 120.0
+    # Expanding light ring
+    ring_rad is floor of (t_progress * 300.0)
+    ring_alpha is (1.0 - t_progress) * 0.8
+    # Faint ring circles
+    outer_a is floor of (20 * ring_alpha)
+    inner_a is floor of (40 * ring_alpha)
+    if outer_a > 1:
+        gfx_circle of [pcx, pcy, ring_rad + 8, 255, 255, 255]
+    if inner_a > 1:
+        gfx_circle of [pcx, pcy, ring_rad, 200, 220, 255]
+    # Tier text with scale animation
+    if game.tier_transition_timer > 80:
+        tier_text is f"TIER {game.scale_tier + 1}"
+        gfx_text of [pcx - 40, pcy - 20, tier_text, 255, 255, 255, 3]
 
 # ============================================================
 # HUD — background, energy bar, text readouts.
@@ -551,16 +641,22 @@ define render_game(game, screen_w, screen_h) as:
     cam_x is game.px
     cam_y is game.py
 
+    # Update camera zoom
+    update_camera_zoom of game
+
     # Update particles
     process_game_events of game
     update_particles of null
 
     gfx_clear of [BG_R, BG_G, BG_B]
+    draw_caustics of [screen_w, game_h, game.tick]
     draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
     draw_entities of [game, cam_x, cam_y, screen_w, game_h]
     draw_combat_entities of [game, cam_x, cam_y, screen_w, game_h]
+    draw_mate of [game, cam_x, cam_y, screen_w, game_h]
     draw_player of [game, screen_w, game_h]
     draw_particles of [cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
+    draw_tier_transition of [game, screen_w, game_h]
     draw_hud of [game, screen_w, game_h]
 
 # Render the game world only (no HUD, no present) — used as backdrop
@@ -570,16 +666,22 @@ define render_world_only(game, screen_w, screen_h) as:
     cam_x is game.px
     cam_y is game.py
 
+    # Update camera zoom
+    update_camera_zoom of game
+
     # Update particles
     process_game_events of game
     update_particles of null
 
     gfx_clear of [BG_R, BG_G, BG_B]
+    draw_caustics of [screen_w, game_h, game.tick]
     draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
     draw_entities of [game, cam_x, cam_y, screen_w, game_h]
     draw_combat_entities of [game, cam_x, cam_y, screen_w, game_h]
+    draw_mate of [game, cam_x, cam_y, screen_w, game_h]
     draw_player of [game, screen_w, game_h]
     draw_particles of [cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
+    draw_tier_transition of [game, screen_w, game_h]
 
 # Render a static ocean background (animated water lines on dark bg)
 define render_ocean_bg(screen_w, screen_h, tick) as:
