@@ -626,6 +626,12 @@ loop while running == 1:
                             game_action of [game, ACTION_BUY_SENSE]
                         case "3":
                             game_action of [game, ACTION_BUY_SPIKES]
+                        case "j":
+                            game_action of [game, ACTION_JET]
+                        case "p":
+                            game_action of [game, ACTION_POISON]
+                        case "e":
+                            game_action of [game, ACTION_ELECTRIC]
                         case "escape":
                             game_state is STATE_PAUSED
                 elif game_state == STATE_PAUSED:

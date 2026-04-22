@@ -16,6 +16,99 @@ BG_G is 16
 BG_B is 32
 
 # ============================================================
+# Particle system — lightweight effect particles
+# ============================================================
+# Max ~100 particles for Pentium performance
+
+_particles is []
+
+define update_particles() as:
+    alive is []
+    for i in range of (len of _particles):
+        p is _particles[i]
+        p.x is p.x + p.vx
+        p.y is p.y + p.vy
+        p.life is p.life - 1
+        if p.life > 0:
+            append of [alive, p]
+    _particles is alive
+
+define draw_particles(cam_x, cam_y, screen_w, game_h, world_w, world_h) as:
+    for i in range of (len of _particles):
+        p is _particles[i]
+        pos is world_to_screen of [p.x, p.y, cam_x, cam_y, screen_w, game_h, world_w, world_h]
+        if pos[0] < -10 or pos[0] > screen_w + 10 or pos[1] < -10 or pos[1] > game_h + 10:
+            continue
+        alpha_frac is p.life / p.max_life
+        sz is floor of (p.size * alpha_frac + 1)
+        if sz < 1:
+            sz is 1
+        # Fade color toward dark
+        cr is floor of (p.r * alpha_frac)
+        cg is floor of (p.g * alpha_frac)
+        cb is floor of (p.b * alpha_frac)
+        gfx_circle of [pos[0], pos[1], sz, cr, cg, cb]
+
+define spawn_death_burst(x, y, palette_idx) as:
+    pal is get_palette of palette_idx
+    for i in range of 10:
+        angle is (random of null) * 6.283
+        speed is 0.5 + (random of null) * 1.5
+        p is {
+            "x": x, "y": y,
+            "vx": (cos of angle) * speed * 0.05,
+            "vy": (sin of angle) * speed * 0.05,
+            "life": 20 + (random_int of [0, 14]),
+            "max_life": 35,
+            "r": pal.otr, "g": pal.otg, "b": pal.otb,
+            "size": 3
+        }
+        if (len of _particles) < 100:
+            append of [_particles, p]
+
+define spawn_collection_sparkle(x, y) as:
+    for i in range of 4:
+        angle is (random of null) * 6.283
+        speed is 0.3 + (random of null) * 0.5
+        p is {
+            "x": x, "y": y,
+            "vx": (cos of angle) * speed * 0.03,
+            "vy": (sin of angle) * speed * 0.03,
+            "life": 10 + (random_int of [0, 8]),
+            "max_life": 18,
+            "r": 255, "g": 255, "b": 100,
+            "size": 2
+        }
+        if (len of _particles) < 100:
+            append of [_particles, p]
+
+define spawn_wake(x, y, angle) as:
+    p is {
+        "x": x, "y": y,
+        "vx": 0 - (cos of angle) * 0.02,
+        "vy": 0 - (sin of angle) * 0.02,
+        "life": 15, "max_life": 15,
+        "r": 60, "g": 100, "b": 140,
+        "size": 2
+    }
+    if (len of _particles) < 100:
+        append of [_particles, p]
+
+define spawn_collision_flash(x, y) as:
+    for i in range of 5:
+        angle is i * 1.257
+        p is {
+            "x": x, "y": y,
+            "vx": (cos of angle) * 0.04,
+            "vy": (sin of angle) * 0.04,
+            "life": 8, "max_life": 8,
+            "r": 255, "g": 255, "b": 255,
+            "size": 4
+        }
+        if (len of _particles) < 100:
+            append of [_particles, p]
+
+# ============================================================
 # World-to-screen coordinate conversion
 # ============================================================
 
@@ -304,6 +397,104 @@ define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
                     draw_creature_body of [p.spec, sx, sy, p.angle, pred_radius, game.tick, 0]
 
 # ============================================================
+# Combat entities — poison clouds, electric bolts, epic cells, part drops
+# ============================================================
+
+define draw_combat_entities(game, cam_x, cam_y, screen_w, game_h) as:
+    # Poison clouds — green circles
+    for i in range of (len of game.poison_clouds):
+        pc is game.poison_clouds[i]
+        if pc.active == 1:
+            pos is world_to_screen of [pc.px, pc.py, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
+            if pos[0] > -80 and pos[0] < screen_w + 80 and pos[1] > -80 and pos[1] < game_h + 80:
+                px_r is floor of (pc.radius * PIXELS_PER_UNIT)
+                if px_r < 2:
+                    px_r is 2
+                # Multiple concentric rings for cloud effect
+                alpha_frac is pc.lifetime / 120.0
+                cr is floor of (40 * alpha_frac)
+                cg is floor of (180 * alpha_frac)
+                cb is floor of (40 * alpha_frac)
+                gfx_circle of [pos[0], pos[1], px_r, cr, cg, cb]
+                if px_r > 4:
+                    gfx_circle of [pos[0], pos[1], floor of (px_r * 0.6), floor of (cr * 0.7), floor of (cg * 0.7), floor of (cb * 0.7)]
+
+    # Electric bolts — white line from source to target
+    for i in range of (len of game.electric_bolts):
+        eb is game.electric_bolts[i]
+        if eb.active == 1:
+            sp is world_to_screen of [eb.sx, eb.sy, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
+            tp is world_to_screen of [eb.tx, eb.ty, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
+            # Flicker: alternate between white and blue
+            if eb.lifetime % 2 == 0:
+                gfx_line of [sp[0], sp[1], tp[0], tp[1], 200, 220, 255]
+            else:
+                gfx_line of [sp[0], sp[1], tp[0], tp[1], 100, 160, 255]
+            # Bright center dot at target
+            gfx_circle of [tp[0], tp[1], 3, 200, 220, 255]
+
+    # Epic cells — large dark pulsing circles
+    for i in range of (len of game.epic_cells):
+        e is game.epic_cells[i]
+        if e.active == 1:
+            pos is world_to_screen of [e.px, e.py, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
+            if pos[0] > -100 and pos[0] < screen_w + 100 and pos[1] > -100 and pos[1] < game_h + 100:
+                px_r is floor of (e.radius * PIXELS_PER_UNIT)
+                # Pulse effect
+                pulse is (sin of (game.tick * 0.05)) * 3
+                px_r is px_r + floor of pulse
+                # Draw with creature body for visual richness
+                draw_creature_body of [e.spec, pos[0], pos[1], e.angle, px_r, game.tick, 0]
+                # Suction ring indicator
+                ring_r is floor of (EPIC_SUCTION_RADIUS * PIXELS_PER_UNIT)
+                # Draw faint ring at suction radius using points
+                ring_segs is 24
+                for rs in range of ring_segs:
+                    ra is rs * 6.283 / ring_segs
+                    rx is pos[0] + floor of ((cos of ra) * ring_r)
+                    ry is pos[1] + floor of ((sin of ra) * ring_r)
+                    gfx_point of [rx, ry, 40, 20, 30]
+
+    # Part drops — colored dots with pulsing glow
+    for i in range of (len of game.part_drops):
+        pd is game.part_drops[i]
+        if pd.active == 1:
+            pos is world_to_screen of [pd.px, pd.py, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
+            if pos[0] > -10 and pos[0] < screen_w + 10 and pos[1] > -10 and pos[1] < game_h + 10:
+                pulse is 3 + floor of ((sin of (game.tick * 0.1)) * 2)
+                # Color by type
+                if pd.part_type == 0:
+                    # Mouth — red
+                    gfx_circle of [pos[0], pos[1], pulse, 255, 100, 80]
+                elif pd.part_type == 1:
+                    # Appendage — blue
+                    gfx_circle of [pos[0], pos[1], pulse, 80, 150, 255]
+                else:
+                    # Palette — yellow
+                    gfx_circle of [pos[0], pos[1], pulse, 255, 220, 80]
+                # Inner white dot
+                gfx_circle of [pos[0], pos[1], 2, 255, 255, 255]
+
+# ============================================================
+# Process game events into particles
+# ============================================================
+
+define process_game_events(game) as:
+    # Death burst
+    if game.event_kill_x >= 0.0:
+        spawn_death_burst of [game.event_kill_x, game.event_kill_y, game.event_kill_palette]
+    # Collision flash
+    if game.event_collision_x >= 0.0:
+        spawn_collision_flash of [game.event_collision_x, game.event_collision_y]
+    # Collection sparkle
+    if game.event_collect_x >= 0.0:
+        spawn_collection_sparkle of [game.event_collect_x, game.event_collect_y]
+    # Wake trail from player movement
+    speed_sq is game.vx * game.vx + game.vy * game.vy
+    if speed_sq > 0.5 and game.tick % 3 == 0:
+        spawn_wake of [game.px, game.py, game.angle]
+
+# ============================================================
 # Player — always at screen center, with full creature body.
 # ============================================================
 
@@ -360,10 +551,16 @@ define render_game(game, screen_w, screen_h) as:
     cam_x is game.px
     cam_y is game.py
 
+    # Update particles
+    process_game_events of game
+    update_particles of null
+
     gfx_clear of [BG_R, BG_G, BG_B]
     draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
     draw_entities of [game, cam_x, cam_y, screen_w, game_h]
+    draw_combat_entities of [game, cam_x, cam_y, screen_w, game_h]
     draw_player of [game, screen_w, game_h]
+    draw_particles of [cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
     draw_hud of [game, screen_w, game_h]
 
 # Render the game world only (no HUD, no present) — used as backdrop
@@ -373,10 +570,16 @@ define render_world_only(game, screen_w, screen_h) as:
     cam_x is game.px
     cam_y is game.py
 
+    # Update particles
+    process_game_events of game
+    update_particles of null
+
     gfx_clear of [BG_R, BG_G, BG_B]
     draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
     draw_entities of [game, cam_x, cam_y, screen_w, game_h]
+    draw_combat_entities of [game, cam_x, cam_y, screen_w, game_h]
     draw_player of [game, screen_w, game_h]
+    draw_particles of [cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
 
 # Render a static ocean background (animated water lines on dark bg)
 define render_ocean_bg(screen_w, screen_h, tick) as:

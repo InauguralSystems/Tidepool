@@ -66,6 +66,12 @@ define new_game(world_w, world_h, seed_val) as:
         # Creature
         "creature": new_creature_spec of null,
 
+        # Per-frame events (consumed by renderer, cleared next frame)
+        "event_kill_x": 0.0, "event_kill_y": 0.0,
+        "event_kill_palette": 0,
+        "event_collision_x": -1.0, "event_collision_y": -1.0,
+        "event_collect_x": -1.0, "event_collect_y": -1.0,
+
         # Entity lists
         "food": [],
         "predators": [],
@@ -153,6 +159,7 @@ define game_tick(game) as:
     if game.game_over == 1:
         return game
 
+    clear_events of game
     game.tick is game.tick + 1
 
     # Physics — no observation needed, pure numeric mutation
@@ -226,23 +233,28 @@ define game_tick(game) as:
     for i in range of (len of game.predators):
         pred is game.predators[i]
         if pred.active == 1:
+            # Stun timer
+            if pred.stunned_timer > 0:
+                pred.stunned_timer is pred.stunned_timer - 1
+
             # Predator physics — unobserved for performance
             unobserved:
-                pred.wander_timer is pred.wander_timer - 1
-                if pred.wander_timer <= 0:
-                    pred.target_angle is rand_range_f of [0 - PI, PI]
-                    pred.wander_timer is random_int of [60, 180]
+                if pred.stunned_timer <= 0:
+                    pred.wander_timer is pred.wander_timer - 1
+                    if pred.wander_timer <= 0:
+                        pred.target_angle is rand_range_f of [0 - PI, PI]
+                        pred.wander_timer is random_int of [60, 180]
 
-                # Steer toward target angle
-                diff is angle_diff of [pred.angle, pred.target_angle]
-                steer is clamp of [diff, -PREDATOR_BASE_TURN_RATE * SIM_DT, PREDATOR_BASE_TURN_RATE * SIM_DT]
-                pred.angle is normalize_angle of (pred.angle + steer)
+                    # Steer toward target angle
+                    diff is angle_diff of [pred.angle, pred.target_angle]
+                    steer is clamp of [diff, -PREDATOR_BASE_TURN_RATE * SIM_DT, PREDATOR_BASE_TURN_RATE * SIM_DT]
+                    pred.angle is normalize_angle of (pred.angle + steer)
 
-                # Thrust
-                pred.vx is pred.vx + (cos of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
-                pred.vy is pred.vy + (sin of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
+                    # Thrust
+                    pred.vx is pred.vx + (cos of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
+                    pred.vy is pred.vy + (sin of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
 
-                # Drag
+                # Drag (always applies)
                 pred.vx is pred.vx * (1.0 - PREDATOR_BASE_DRAG * SIM_DT)
                 pred.vy is pred.vy * (1.0 - PREDATOR_BASE_DRAG * SIM_DT)
 
@@ -254,15 +266,33 @@ define game_tick(game) as:
             dist_sq is torus_dist_sq of [game.px, game.py, pred.px, pred.py, game.world_w, game.world_h]
             kill_range is (p_radius + pred.radius) * (p_radius + pred.radius)
             if dist_sq < kill_range:
-                if game.spikes_level > 0:
-                    # Player has spikes — damage predator
+                player_power is creature_collision_power of [game.creature, game.spikes_level, game.mass]
+                pred_power is pred.size + 1
+                if player_power >= pred_power:
+                    # Player overpowers — damage predator, knockback
                     pred.hp is pred.hp - 1
+                    # Knockback
+                    bdx is torus_delta of [game.px, pred.px, game.world_w]
+                    bdy is torus_delta of [game.py, pred.py, game.world_h]
+                    bd is sqrt of (bdx * bdx + bdy * bdy)
+                    if bd > 0.01:
+                        pred.vx is pred.vx + (bdx / bd) * 2.0
+                        pred.vy is pred.vy + (bdy / bd) * 2.0
+                        game.vx is game.vx - (bdx / bd) * 1.0
+                        game.vy is game.vy - (bdy / bd) * 1.0
+                    game.event_collision_x is pred.px
+                    game.event_collision_y is pred.py
                     if pred.hp <= 0:
                         pred.active is 0
-                        game.score is game.score + 10
+                        game.score is game.score + 10 + pred.size * 3
                         game.dna is game.dna + 3
+                        game.event_kill_x is pred.px
+                        game.event_kill_y is pred.py
+                        game.event_kill_palette is pred.spec.palette
                         # Drop meat into the pre-allocated pool
                         spawn_meat of [game.meat, pred.px, pred.py, 300]
+                        # Part drop chance
+                        try_drop_part of [game, pred]
                 else:
                     # Player dies
                     game.game_over is 1
@@ -270,22 +300,38 @@ define game_tick(game) as:
                     game.message is "Consumed by predator"
                     return game
 
-    # Meat decay
+    # NPC-vs-NPC combat
+    npc_combat of game
+
+    # Meat collection (carnivore/omnivore)
     for i in range of (len of game.meat):
         m is game.meat[i]
         if m.active == 1:
             m.lifetime is m.lifetime - 1
             if m.lifetime <= 0:
                 m.active is 0
+            else:
+                # Meat-player collision
+                dist_sq is torus_dist_sq of [game.px, game.py, m.px, m.py, game.world_w, game.world_h]
+                eat_range is (p_radius + 0.4) * (p_radius + 0.4)
+                if dist_sq < eat_range:
+                    m.active is 0
+                    game.energy is game.energy + 15
+                    game.score is game.score + 5
+                    game.food_eaten is game.food_eaten + 1
+                    game.meat_eaten is game.meat_eaten + 1
+                    game.dna is game.dna + 2
+                    game.event_collect_x is m.px
+                    game.event_collect_y is m.py
 
-    # Poison cloud decay
-    for i in range of (len of game.poison_clouds):
-        pc is game.poison_clouds[i]
-        if pc.active == 1:
-            pc.lifetime is pc.lifetime - 1
-            pc.radius is pc.radius + 0.02
-            if pc.lifetime <= 0:
-                pc.active is 0
+    # Part drop collection and decay
+    update_part_drops of game
+
+    # Auto weapons (poison, electric)
+    player_auto_weapons of game
+
+    # Poison cloud update (expand, damage, drift, despawn)
+    update_poison_clouds of game
 
     # Electric bolt decay
     for i in range of (len of game.electric_bolts):
@@ -305,6 +351,11 @@ define game_tick(game) as:
     if game.jet_active > 0:
         game.jet_active is game.jet_active - 1
 
+    # Epic cells (patrol, suction, collision)
+    update_epic_cells of game
+    if game.game_over == 1:
+        return game
+
     # Scale tier progression — one tier per 10 food eaten
     if game.scale_tier < SCALE_TIER_COUNT - 1:
         if game.food_eaten >= (game.scale_tier + 1) * 10:
@@ -312,6 +363,356 @@ define game_tick(game) as:
             game.message is ""
 
     return game
+
+# ============================================================
+# NPC-vs-NPC combat
+# ============================================================
+
+define npc_combat(game) as:
+    num_preds is len of game.predators
+    for i in range of num_preds:
+        attacker is game.predators[i]
+        if attacker.active != 1:
+            continue
+        if attacker.stunned_timer > 0:
+            continue
+        if attacker.species_id < 0 or attacker.species_id >= (len of game.species):
+            continue
+        a_diet is game.species[attacker.species_id].diet
+        if a_diet == MOUTH_FILTER:
+            continue
+        for j in range of num_preds:
+            if i == j:
+                continue
+            target is game.predators[j]
+            if target.active != 1:
+                continue
+            if target.species_id == attacker.species_id:
+                continue
+            if target.species_id < 0 or target.species_id >= (len of game.species):
+                continue
+            t_diet is game.species[target.species_id].diet
+            # Only attack herbivores or smaller NPCs
+            if t_diet != MOUTH_FILTER and target.size >= attacker.size:
+                continue
+            dist_sq is torus_dist_sq of [attacker.px, attacker.py, target.px, target.py, game.world_w, game.world_h]
+            contact is (attacker.radius + target.radius) * (attacker.radius + target.radius)
+            if dist_sq < contact:
+                target.hp is target.hp - 1
+                # Knockback
+                bdx is torus_delta of [attacker.px, target.px, game.world_w]
+                bdy is torus_delta of [attacker.py, target.py, game.world_h]
+                bd is sqrt of (bdx * bdx + bdy * bdy)
+                if bd > 0.01:
+                    target.vx is target.vx + (bdx / bd) * 2.0
+                    target.vy is target.vy + (bdy / bd) * 2.0
+                if target.hp <= 0:
+                    game.event_kill_x is target.px
+                    game.event_kill_y is target.py
+                    game.event_kill_palette is target.spec.palette
+                    spawn_meat of [game.meat, target.px, target.py, 300]
+                    # Respawn predator
+                    target.px is rand_range_f of [0, game.world_w]
+                    target.py is rand_range_f of [0, game.world_h]
+                    target.hp is target.size + 1
+                    target.angle is rand_range_f of [0, 2.0 * PI]
+                    target.vx is 0.0
+                    target.vy is 0.0
+
+# ============================================================
+# Auto weapons (poison cloud, electric bolt)
+# ============================================================
+
+define player_auto_weapons(game) as:
+    poison_count is count_appendage_type of [game.creature, APPENDAGE_POISON]
+    electric_count is count_appendage_type of [game.creature, APPENDAGE_ELECTRIC]
+    num_preds is len of game.predators
+
+    # Auto-poison: trigger when enemy within 3 units
+    if poison_count > 0 and game.poison_cooldown == 0:
+        for i in range of num_preds:
+            p is game.predators[i]
+            if p.active != 1:
+                continue
+            dist is torus_dist of [game.px, game.py, p.px, p.py, game.world_w, game.world_h]
+            if dist < 3.0:
+                append of [game.poison_clouds, new_poison_cloud of [game.px, game.py, 1]]
+                game.poison_cooldown is POISON_COOLDOWN_MAX
+                break
+
+    # Auto-electric: fire at nearest target within range
+    if electric_count > 0 and game.electric_cooldown == 0:
+        best_dist is 999.0
+        best_idx is -1
+        for i in range of num_preds:
+            p is game.predators[i]
+            if p.active != 1 or p.stunned_timer > 0:
+                continue
+            dist is torus_dist of [game.px, game.py, p.px, p.py, game.world_w, game.world_h]
+            if dist < ELECTRIC_RANGE and dist < best_dist:
+                best_dist is dist
+                best_idx is i
+        if best_idx >= 0:
+            target is game.predators[best_idx]
+            append of [game.electric_bolts, new_electric_bolt of [game.px, game.py, target.px, target.py]]
+            target.stunned_timer is ELECTRIC_STUN_DURATION
+            target.hp is target.hp - 1
+            if target.hp <= 0:
+                game.event_kill_x is target.px
+                game.event_kill_y is target.py
+                game.event_kill_palette is target.spec.palette
+                game.score is game.score + 10 + target.size * 3
+                spawn_meat of [game.meat, target.px, target.py, 300]
+                try_drop_part of [game, target]
+                target.px is rand_range_f of [0, game.world_w]
+                target.py is rand_range_f of [0, game.world_h]
+                target.hp is target.size + 1
+                target.angle is rand_range_f of [0, 2.0 * PI]
+                target.vx is 0.0
+                target.vy is 0.0
+            game.electric_cooldown is ELECTRIC_COOLDOWN_MAX
+
+# ============================================================
+# Poison cloud update
+# ============================================================
+
+define update_poison_clouds(game) as:
+    alive is []
+    for i in range of (len of game.poison_clouds):
+        pc is game.poison_clouds[i]
+        if pc.active != 1:
+            continue
+        pc.lifetime is pc.lifetime - 1
+        if pc.lifetime <= 0:
+            pc.active is 0
+            continue
+        # Expand radius
+        pc.radius is 0.5 + 2.5 * (1.0 - pc.lifetime / POISON_DURATION)
+        # Drift with current
+        pc.px is wrap_coord of [pc.px + (cos of game.current_angle) * CURRENT_SPEED * SIM_DT, game.world_w]
+        pc.py is wrap_coord of [pc.py + (sin of game.current_angle) * CURRENT_SPEED * SIM_DT, game.world_h]
+        # Damage predators every 30 ticks
+        if pc.owner_is_player == 1 and pc.lifetime % POISON_DAMAGE_INTERVAL == 0:
+            for j in range of (len of game.predators):
+                pred is game.predators[j]
+                if pred.active != 1:
+                    continue
+                dist_sq is torus_dist_sq of [pc.px, pc.py, pred.px, pred.py, game.world_w, game.world_h]
+                if dist_sq < pc.radius * pc.radius:
+                    pred.hp is pred.hp - 1
+                    if pred.hp <= 0:
+                        game.event_kill_x is pred.px
+                        game.event_kill_y is pred.py
+                        game.event_kill_palette is pred.spec.palette
+                        game.score is game.score + 10 + pred.size * 3
+                        spawn_meat of [game.meat, pred.px, pred.py, 300]
+                        try_drop_part of [game, pred]
+                        pred.px is rand_range_f of [0, game.world_w]
+                        pred.py is rand_range_f of [0, game.world_h]
+                        pred.hp is pred.size + 1
+                        pred.angle is rand_range_f of [0, 2.0 * PI]
+                        pred.vx is 0.0
+                        pred.vy is 0.0
+        # NPC clouds damage player
+        if pc.owner_is_player == 0:
+            dist_sq is torus_dist_sq of [pc.px, pc.py, game.px, game.py, game.world_w, game.world_h]
+            if dist_sq < pc.radius * pc.radius and pc.lifetime % POISON_DAMAGE_INTERVAL == 0:
+                game.energy is game.energy - 10
+        append of [alive, pc]
+    game.poison_clouds is alive
+
+# ============================================================
+# Epic cell update
+# ============================================================
+
+define update_epic_cells(game) as:
+    # Spawn epics based on tier
+    if game.scale_tier >= 2 and (len of game.epic_cells) < 1:
+        cx is rand_range_f of [0, game.world_w]
+        cy is rand_range_f of [0, game.world_h]
+        epic is new_epic_cell of [cx, cy, EPIC_PATROL_RADIUS]
+        epic.spec.palette is random_int of [0, 4]
+        epic.spec.body_segments is 5
+        epic.spec.body_shape is SHAPE_SHELL
+        append of [game.epic_cells, epic]
+    if game.scale_tier >= 4 and (len of game.epic_cells) < 2:
+        cx is rand_range_f of [0, game.world_w]
+        cy is rand_range_f of [0, game.world_h]
+        epic is new_epic_cell of [cx, cy, EPIC_PATROL_RADIUS]
+        epic.spec.palette is random_int of [0, 4]
+        epic.spec.body_segments is 6
+        epic.spec.body_shape is SHAPE_SHELL
+        append of [game.epic_cells, epic]
+
+    p_radius is player_radius of game
+    for i in range of (len of game.epic_cells):
+        e is game.epic_cells[i]
+        if e.active != 1:
+            continue
+        # Circular patrol
+        e.angle is e.angle + EPIC_PATROL_SPEED * SIM_DT
+        e.px is wrap_coord of [e.patrol_cx + (cos of e.angle) * e.patrol_radius, game.world_w]
+        e.py is wrap_coord of [e.patrol_cy + (sin of e.angle) * e.patrol_radius, game.world_h]
+
+        # Suction force on player
+        dx is torus_delta of [game.px, e.px, game.world_w]
+        dy is torus_delta of [game.py, e.py, game.world_h]
+        dist is sqrt of (dx * dx + dy * dy)
+        if dist < EPIC_SUCTION_RADIUS and dist > e.radius:
+            strength is EPIC_SUCTION_FORCE / (dist * dist)
+            game.vx is game.vx + (dx / dist) * strength
+            game.vy is game.vy + (dy / dist) * strength
+
+        # Suction force on predators
+        for j in range of (len of game.predators):
+            pred is game.predators[j]
+            if pred.active != 1:
+                continue
+            pdx is torus_delta of [pred.px, e.px, game.world_w]
+            pdy is torus_delta of [pred.py, e.py, game.world_h]
+            pdist is sqrt of (pdx * pdx + pdy * pdy)
+            if pdist < EPIC_SUCTION_RADIUS and pdist > e.radius:
+                pstr is EPIC_SUCTION_FORCE / (pdist * pdist)
+                pred.vx is pred.vx + (pdx / pdist) * pstr
+                pred.vy is pred.vy + (pdy / pdist) * pstr
+
+        # Player collision — instant death
+        dist_sq is torus_dist_sq of [game.px, game.py, e.px, e.py, game.world_w, game.world_h]
+        kill_range is (p_radius + e.radius) * (p_radius + e.radius)
+        if dist_sq < kill_range:
+            game.game_over is 1
+            game.game_over_reason is GAME_OVER_EPIC
+            game.message is "Devoured by a leviathan"
+
+# ============================================================
+# Part drop logic
+# ============================================================
+
+define try_drop_part(game, pred) as:
+    roll is random_int of [0, 99]
+    if roll < PART_DROP_CHANCE:
+        # Pick a part type based on predator
+        type_roll is random_int of [0, 2]
+        value is 0
+        if type_roll == PART_TYPE_MOUTH:
+            value is pred.spec.mouth_type
+        elif type_roll == PART_TYPE_APPENDAGE:
+            # Pick a random appendage type the pred has
+            value is APPENDAGE_FIN
+            for k in range of (len of pred.spec.appendages):
+                if pred.spec.appendages[k] > APPENDAGE_NONE:
+                    value is pred.spec.appendages[k]
+                    break
+        else:
+            value is pred.spec.palette
+        append of [game.part_drops, new_part_drop of [pred.px, pred.py, type_roll, value]]
+
+define update_part_drops(game) as:
+    p_radius is player_radius of game
+    alive is []
+    for i in range of (len of game.part_drops):
+        pd is game.part_drops[i]
+        if pd.active != 1:
+            continue
+        pd.lifetime is pd.lifetime - 1
+        if pd.lifetime <= 0:
+            pd.active is 0
+            continue
+        # Drift
+        pd.px is wrap_coord of [pd.px + pd.vx * SIM_DT, game.world_w]
+        pd.py is wrap_coord of [pd.py + pd.vy * SIM_DT, game.world_h]
+        # Player collection
+        dist_sq is torus_dist_sq of [game.px, game.py, pd.px, pd.py, game.world_w, game.world_h]
+        collect_range is (p_radius + 0.5) * (p_radius + 0.5)
+        if dist_sq < collect_range:
+            pd.active is 0
+            game.dna is game.dna + 5
+            game.event_collect_x is pd.px
+            game.event_collect_y is pd.py
+            game.message is "Part collected! +5 DNA"
+            continue
+        append of [alive, pd]
+    game.part_drops is alive
+
+# ============================================================
+# Jet boost activation
+# ============================================================
+
+define activate_jet(game) as:
+    if game.game_over == 1:
+        return null
+    if game.jet_cooldown > 0 or game.jet_active > 0:
+        return null
+    has_jet is count_appendage_type of [game.creature, APPENDAGE_JET]
+    if has_jet > 0:
+        game.jet_active is JET_DURATION
+        game.jet_cooldown is JET_COOLDOWN_MAX
+        game.thrusting is 1
+
+# ============================================================
+# Poison activation (manual)
+# ============================================================
+
+define activate_poison(game) as:
+    if game.game_over == 1:
+        return null
+    if game.poison_cooldown > 0:
+        return null
+    has_poison is count_appendage_type of [game.creature, APPENDAGE_POISON]
+    if has_poison > 0:
+        append of [game.poison_clouds, new_poison_cloud of [game.px, game.py, 1]]
+        game.poison_cooldown is POISON_COOLDOWN_MAX
+
+# ============================================================
+# Electric activation (manual)
+# ============================================================
+
+define activate_electric(game) as:
+    if game.game_over == 1:
+        return null
+    if game.electric_cooldown > 0:
+        return null
+    has_electric is count_appendage_type of [game.creature, APPENDAGE_ELECTRIC]
+    if has_electric > 0:
+        best_dist is 999.0
+        best_idx is -1
+        for i in range of (len of game.predators):
+            p is game.predators[i]
+            if p.active != 1 or p.stunned_timer > 0:
+                continue
+            dist is torus_dist of [game.px, game.py, p.px, p.py, game.world_w, game.world_h]
+            if dist < ELECTRIC_RANGE and dist < best_dist:
+                best_dist is dist
+                best_idx is i
+        if best_idx >= 0:
+            target is game.predators[best_idx]
+            append of [game.electric_bolts, new_electric_bolt of [game.px, game.py, target.px, target.py]]
+            target.stunned_timer is ELECTRIC_STUN_DURATION
+            target.hp is target.hp - 1
+            if target.hp <= 0:
+                game.event_kill_x is target.px
+                game.event_kill_y is target.py
+                game.event_kill_palette is target.spec.palette
+                game.score is game.score + 10 + target.size * 3
+                spawn_meat of [game.meat, target.px, target.py, 300]
+                target.px is rand_range_f of [0, game.world_w]
+                target.py is rand_range_f of [0, game.world_h]
+                target.hp is target.size + 1
+                target.vx is 0.0
+                target.vy is 0.0
+            game.electric_cooldown is ELECTRIC_COOLDOWN_MAX
+
+# ============================================================
+# Clear per-frame events (call at start of tick)
+# ============================================================
+
+define clear_events(game) as:
+    game.event_kill_x is -1.0
+    game.event_kill_y is -1.0
+    game.event_collision_x is -1.0
+    game.event_collision_y is -1.0
+    game.event_collect_x is -1.0
+    game.event_collect_y is -1.0
 
 # ============================================================
 # Input mapping
@@ -358,6 +759,12 @@ define game_action(game, action) as:
                 game.dna is game.dna - 5
                 game.spikes_level is game.spikes_level + 1
                 game.message is ""
+        case ACTION_JET:
+            activate_jet of game
+        case ACTION_POISON:
+            activate_poison of game
+        case ACTION_ELECTRIC:
+            activate_electric of game
     return game
 
 # ============================================================
