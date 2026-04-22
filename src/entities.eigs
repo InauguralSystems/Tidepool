@@ -5,18 +5,232 @@
 
 load_file of "src/constants.eigs"
 
-# Create a default creature spec
-define new_creature_spec as:
+# ============================================================
+# Palette definitions — RGB colors per palette index
+# ============================================================
+# Each palette: [outer_r,g,b, inner_r,g,b, accent_r,g,b, eye_r,g,b]
+
+define get_palette(index) as:
+    p is index % 5
+    if p == 0:
+        # Lagoon: blue-green tones
+        return {
+            "otr": 90, "otg": 230, "otb": 175,
+            "ir": 15, "ig": 88, "ib": 84,
+            "ar": 100, "ag": 210, "ab": 255,
+            "er": 240, "eg": 248, "eb": 250
+        }
+    if p == 1:
+        # Ember: red-orange tones
+        return {
+            "otr": 244, "otg": 136, "otb": 90,
+            "ir": 109, "ig": 34, "ib": 22,
+            "ar": 255, "ag": 208, "ab": 138,
+            "er": 255, "eg": 247, "eb": 216
+        }
+    if p == 2:
+        # Orchid: purple-pink tones
+        return {
+            "otr": 183, "otg": 136, "otb": 255,
+            "ir": 58, "ig": 24, "ib": 98,
+            "ar": 228, "ag": 198, "ab": 255,
+            "er": 242, "eg": 235, "eb": 255
+        }
+    if p == 3:
+        # Lichen: green-brown tones
+        return {
+            "otr": 152, "otg": 214, "otb": 112,
+            "ir": 28, "ig": 74, "ib": 34,
+            "ar": 227, "ag": 245, "ab": 163,
+            "er": 242, "eg": 250, "eb": 218
+        }
+    # p == 4: Sunrise: yellow-orange tones
+    return {
+        "otr": 255, "otg": 211, "otb": 110,
+        "ir": 122, "ig": 62, "ib": 28,
+        "ar": 255, "ag": 132, "ab": 102,
+        "er": 255, "eg": 246, "eb": 216
+    }
+
+# ============================================================
+# Creature spec constructors
+# ============================================================
+
+# Create a default creature spec with all arrays
+define new_creature_spec() as:
     return {
         "palette": 0,
         "body_shape": 0,
         "body_segments": 3,
         "pattern": 0,
         "mouth_type": MOUTH_FILTER,
-        "eyes": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "eyes": [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "eye_anchor": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         "spikes": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        "appendages": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        "spike_anchor": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "appendages": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "appendage_anchor": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     }
+
+# Generate a randomized creature spec for a given tier and diet
+define random_creature_spec(tier, diet) as:
+    spec is new_creature_spec of null
+    spec.palette is random_int of [0, 4]
+    spec.body_shape is random_int of [0, 3]
+    base_segs is random_int of [1, 4]
+    tier_bonus is floor of (tier / 2)
+    spec.body_segments is clamp of [base_segs + tier_bonus, 1, CREATURE_MAX_SEGMENTS]
+    spec.pattern is random_int of [0, 3]
+    spec.mouth_type is diet
+
+    # Eyes: always at least one pair on the head segment
+    spec.eyes[0] is 1
+    spec.eyes[1] is 1
+    if (random of null) < 0.5:
+        spec.eyes[2] is 1
+        spec.eyes[3] is 1
+
+    # Spikes: carnivores/aggressive get more
+    if diet == MOUTH_JAW:
+        spec.spikes[0] is 1
+        spec.spikes[1] is 1
+        if (random of null) < 0.5:
+            spec.spikes[2] is 1
+            spec.spikes[3] is 1
+
+    # Appendages based on diet
+    if diet == MOUTH_JAW:
+        spec.appendages[0] is APPENDAGE_CLAW
+        spec.appendages[1] is APPENDAGE_CLAW
+        if spec.body_segments >= 2:
+            spec.appendages[2] is APPENDAGE_FIN
+            spec.appendages[3] is APPENDAGE_FIN
+    elif diet == MOUTH_FILTER:
+        spec.appendages[0] is APPENDAGE_FIN
+        spec.appendages[1] is APPENDAGE_FIN
+        if spec.body_segments >= 2:
+            spec.appendages[2] is APPENDAGE_CILIA
+            spec.appendages[3] is APPENDAGE_CILIA
+    else:
+        # Omnivore
+        spec.appendages[0] is APPENDAGE_FIN
+        spec.appendages[1] is APPENDAGE_FIN
+        if spec.body_segments >= 2:
+            spec.appendages[2] is APPENDAGE_CLAW
+            spec.appendages[3] is APPENDAGE_CLAW
+
+    # Weapon appendages at higher tiers
+    if diet == MOUTH_JAW and spec.body_segments >= 3 and (random of null) < 0.33:
+        slot is 4
+        spec.appendages[slot] is APPENDAGE_POISON
+        spec.appendages[slot + 1] is APPENDAGE_POISON
+
+    # Clamp anchors to valid segment range
+    max_seg is spec.body_segments - 1
+    for i in range of CREATURE_MAX_SOCKETS:
+        if spec.eye_anchor[i] > max_seg:
+            spec.eye_anchor[i] is max_seg
+        if spec.spike_anchor[i] > max_seg:
+            spec.spike_anchor[i] is max_seg
+        if spec.appendage_anchor[i] > max_seg:
+            spec.appendage_anchor[i] is max_seg
+
+    return spec
+
+# ============================================================
+# Stat derivation from creature spec
+# ============================================================
+
+# Socket side: even sockets = +1 (right), odd = -1 (left)
+define socket_side(socket) as:
+    if socket % 2 == 0:
+        return 1
+    return -1
+
+# Count active appendages of a given type in a spec
+define count_appendage_type(spec, app_type) as:
+    count is 0
+    max_sockets is spec.body_segments * 2
+    if max_sockets > CREATURE_MAX_SOCKETS:
+        max_sockets is CREATURE_MAX_SOCKETS
+    for i in range of max_sockets:
+        if spec.appendages[i] == app_type:
+            count is count + 1
+    return count
+
+# Count active spikes in a spec
+define count_spikes(spec) as:
+    count is 0
+    max_sockets is spec.body_segments * 2
+    if max_sockets > CREATURE_MAX_SOCKETS:
+        max_sockets is CREATURE_MAX_SOCKETS
+    for i in range of max_sockets:
+        if spec.spikes[i] == 1:
+            count is count + 1
+    return count
+
+# Count active eyes in a spec
+define count_eyes(spec) as:
+    count is 0
+    max_sockets is spec.body_segments * 2
+    if max_sockets > CREATURE_MAX_SOCKETS:
+        max_sockets is CREATURE_MAX_SOCKETS
+    for i in range of max_sockets:
+        if spec.eyes[i] == 1:
+            count is count + 1
+    return count
+
+# Creature radius from spec + mass
+define creature_radius(spec, mass) as:
+    return PLAYER_BASE_RADIUS + mass * 0.05 + spec.body_segments * 0.03
+
+# Creature thrust from spec + speed_level + tier + mass
+define creature_thrust(spec, speed_level, tier, mass) as:
+    thrust is PLAYER_BASE_THRUST + speed_level * 2.5
+    fin_count is count_appendage_type of [spec, APPENDAGE_FIN]
+    thrust is thrust + fin_count * 0.8
+    return thrust
+
+# Creature drag from spec
+define creature_drag(spec) as:
+    drag is PLAYER_BASE_DRAG
+    cilia_count is count_appendage_type of [spec, APPENDAGE_CILIA]
+    drag is drag - cilia_count * 0.15
+    if drag < 0.5:
+        drag is 0.5
+    return drag
+
+# Creature turn rate from spec + mass
+define creature_turn_rate(spec, mass) as:
+    rate is PLAYER_BASE_TURN_RATE
+    fin_count is count_appendage_type of [spec, APPENDAGE_FIN]
+    cilia_count is count_appendage_type of [spec, APPENDAGE_CILIA]
+    rate is rate + fin_count * 0.2 + cilia_count * 0.15
+    return rate
+
+# Collision power from spec + spikes_level + mass
+define creature_collision_power(spec, spikes_level, mass) as:
+    spike_bonus is floor of (count_spikes of spec / 6)
+    claw_bonus is floor of (count_appendage_type of [spec, APPENDAGE_CLAW] / 6)
+    jaw_bonus is 0
+    if spec.mouth_type == MOUTH_JAW:
+        jaw_bonus is 2
+    elif spec.mouth_type == MOUTH_PROBOSCIS:
+        jaw_bonus is 1
+    return mass + spikes_level * 2 + spike_bonus + claw_bonus + jaw_bonus
+
+# Sense range from spec + sense_level
+define creature_sense_range(spec, sense_level) as:
+    eye_count is count_eyes of spec
+    bonus is floor of (eye_count / 4)
+    level is sense_level + bonus
+    if level <= 0:
+        return 0.0
+    return 3.0 + level * 3.0
+
+# ============================================================
+# Entity constructors
+# ============================================================
 
 # Create a food entity
 define new_food(x, y) as:
@@ -107,7 +321,7 @@ define new_part_drop(x, y, part_type, part_value) as:
 # Create a species definition
 define new_species(diet, aggression, base_size) as:
     return {
-        "spec": new_creature_spec of null,
+        "spec": random_creature_spec of [0, diet],
         "diet": diet,
         "aggression": aggression,
         "base_size": base_size,

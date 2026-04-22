@@ -83,21 +83,38 @@ define new_game(world_w, world_h, seed_val) as:
         y is rand_range_f of [0, world_h]
         append of [game.food, new_food of [x, y]]
 
-    # Spawn initial species
-    for i in range of 4:
-        diet is random_int of [0, 2]
-        aggro is random_int of [0, 2]
+    # Spawn initial species with varied diets
+    # Species 0 is always small passive herbivore prey
+    append of [game.species, new_species of [MOUTH_FILTER, 0, 1]]
+    for i in range of 3:
+        roll is random_int of [0, 9]
+        if roll < 4:
+            diet is MOUTH_FILTER
+            aggro is random_int of [0, 1]
+        elif roll < 8:
+            diet is MOUTH_JAW
+            aggro is random_int of [2, 3]
+        else:
+            diet is MOUTH_PROBOSCIS
+            aggro is random_int of [1, 2]
         size is random_int of [1, 3]
         append of [game.species, new_species of [diet, aggro, size]]
 
-    # Spawn initial predators
+    # Spawn initial predators with species-derived specs
     for i in range of 8:
         x is rand_range_f of [0, world_w]
         y is rand_range_f of [0, world_h]
         angle is rand_range_f of [0, 2.0 * PI]
         sp_id is random_int of [0, 3]
         size is game.species[sp_id].base_size
-        append of [game.predators, new_predator of [x, y, angle, sp_id, size]]
+        pred is new_predator of [x, y, angle, sp_id, size]
+        # Copy species spec and adjust segments to predator size
+        pred.spec is random_creature_spec of [0, game.species[sp_id].diet]
+        pred.spec.palette is game.species[sp_id].spec.palette
+        pred.spec.body_shape is game.species[sp_id].spec.body_shape
+        pred.spec.body_segments is clamp of [size, 1, CREATURE_MAX_SEGMENTS]
+        pred.spec.mouth_type is game.species[sp_id].diet
+        append of [game.predators, pred]
 
     # Pre-allocate meat pool so spawn_meat can reuse slots
     for i in range of MAX_MEAT:
@@ -112,19 +129,19 @@ define new_game(world_w, world_h, seed_val) as:
 # ============================================================
 
 define player_radius(game) as:
-    return PLAYER_BASE_RADIUS + game.scale_tier * 0.15
+    return creature_radius of [game.creature, game.mass]
 
 define player_thrust(game) as:
-    base is PLAYER_BASE_THRUST + game.speed_level * 1.5
+    thrust is creature_thrust of [game.creature, game.speed_level, game.scale_tier, game.mass]
     if game.jet_active > 0:
-        return base * 2.5
-    return base
+        return thrust * 2.5
+    return thrust
 
 define player_drag(game) as:
-    return PLAYER_BASE_DRAG
+    return creature_drag of game.creature
 
 define player_turn_rate(game) as:
-    return PLAYER_BASE_TURN_RATE + game.speed_level * 0.3
+    return creature_turn_rate of [game.creature, game.mass]
 
 # ============================================================
 # Core simulation tick

@@ -494,10 +494,22 @@ define start_game(diet_choice) as:
     # Apply diet choice (0 = herbivore, 1 = carnivore)
     if diet_choice == 1:
         game.creature.mouth_type is MOUTH_JAW
+        game.creature.palette is 1
+        game.creature.appendages[0] is APPENDAGE_CLAW
+        game.creature.appendages[1] is APPENDAGE_CLAW
+        game.creature.appendages[2] is APPENDAGE_FIN
+        game.creature.appendages[3] is APPENDAGE_FIN
+        game.creature.spikes[0] is 1
+        game.creature.spikes[1] is 1
         game.speed_level is 1
         game.alignment is 1
     else:
         game.creature.mouth_type is MOUTH_FILTER
+        game.creature.palette is 0
+        game.creature.appendages[0] is APPENDAGE_FIN
+        game.creature.appendages[1] is APPENDAGE_FIN
+        game.creature.appendages[2] is APPENDAGE_CILIA
+        game.creature.appendages[3] is APPENDAGE_CILIA
         game.alignment is -1
     prev_tier is game.scale_tier
     tutorial_shown is 0
