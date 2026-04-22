@@ -171,4 +171,32 @@ define render_game(game, screen_w, screen_h) as:
     draw_entities of [game, cam_x, cam_y, screen_w, game_h]
     draw_player of [game, screen_w, game_h]
     draw_hud of [game, screen_w, game_h]
-    gfx_present of null
+
+# Render the game world only (no HUD, no present) — used as backdrop
+# for overlay screens (pause, game over, diet choice).
+define render_world_only(game, screen_w, screen_h) as:
+    game_h is screen_h - HUD_HEIGHT
+    cam_x is game.px
+    cam_y is game.py
+
+    gfx_clear of [BG_R, BG_G, BG_B]
+    draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
+    draw_entities of [game, cam_x, cam_y, screen_w, game_h]
+    draw_player of [game, screen_w, game_h]
+
+# Render a static ocean background (animated water lines on dark bg)
+define render_ocean_bg(screen_w, screen_h, tick) as:
+    gfx_clear of [BG_R, BG_G, BG_B]
+    # Animate some faint water current lines across the screen
+    for i in range of 20:
+        x0 is floor of (i * 42)
+        y0 is floor of (200 + (sin of (i * 0.5 + tick * 0.008)) * 80)
+        x1 is x0 + 30
+        y1 is y0 + floor of ((cos of (i * 0.3 + tick * 0.006)) * 10)
+        gfx_line of [x0, y0, x1, y1, 15, 28, 45]
+    for i in range of 15:
+        x0 is floor of (i * 55 + 20)
+        y0 is floor of (350 + (cos of (i * 0.7 + tick * 0.005)) * 60)
+        x1 is x0 + 25
+        y1 is y0 + floor of ((sin of (i * 0.4 + tick * 0.007)) * 8)
+        gfx_line of [x0, y0, x1, y1, 12, 24, 40]
