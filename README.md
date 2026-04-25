@@ -9,17 +9,24 @@ five scale tiers.
 
 ## Requirements
 
-EigenScript v0.7.1 or later:
+EigenScript v0.9.3.4 or later (with SDL2 graphics):
 
 ```bash
 git clone https://github.com/InauguralSystems/EigenScript.git
-cd EigenScript && make install
+cd EigenScript && make install-gfx
 ```
 
 ## Run
 
 ```bash
+eigenscript tidepool.eigs
+```
+
+Run headless tests without SDL2:
+
+```bash
 eigenscript test_game.eigs
+eigenscript test_regressions.eigs
 ```
 
 ## Status
