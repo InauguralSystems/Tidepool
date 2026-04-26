@@ -164,9 +164,19 @@ define world_to_screen(wx, wy, cam_x, cam_y, screen_w, screen_h, world_w, world_
 # relative to head at (cx, cy), stepping backward along the
 # forward axis by `spacing` per segment.
 
-define segment_position(seg, cx, cy, spacing, fx, fy) as:
-    x is cx - fx * spacing * seg
-    y is cy - fy * spacing * seg
+define segment_position(seg, cx, cy, spacing, fx, fy, spine_bend) as:
+    # Lateral offset from spine bends: each joint shifts the segment sideways
+    lx is 0 - fy
+    ly is fx
+    lat_offset is 0.0
+    if spine_bend != null and seg > 0:
+        joints is seg
+        if joints > (len of spine_bend):
+            joints is len of spine_bend
+        for j in range of joints:
+            lat_offset is lat_offset + (spine_bend[j] - 1) * spacing * 0.3
+    x is cx - fx * spacing * seg + lx * lat_offset
+    y is cy - fy * spacing * seg + ly * lat_offset
     return [floor of x, floor of y]
 
 # ============================================================
@@ -197,7 +207,7 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
     # Draw body segments back-to-front (tail first)
     i is seg_count - 1
     loop while i >= 0:
-        seg_pos is segment_position of [i, sx, sy, seg_spacing, fx, fy]
+        seg_pos is segment_position of [i, sx, sy, seg_spacing, fx, fy, spec.spine_bend]
         sr is clamp of [radius - i * 2, 5, radius]
 
         # Wobble animation
@@ -247,7 +257,7 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
         app_type is spec.appendages[ai]
         if app_type != APPENDAGE_NONE:
             seg is clamp of [spec.appendage_anchor[ai], 0, seg_count - 1]
-            apos is segment_position of [seg, sx, sy, seg_spacing, fx, fy]
+            apos is segment_position of [seg, sx, sy, seg_spacing, fx, fy, spec.spine_bend]
             side is socket_side of ai
             # Appendage base position offset laterally
             base_x is apos[0] + floor of (lx * side * radius * 0.5)
@@ -289,7 +299,7 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
     for si in range of max_sockets:
         if spec.spikes[si] == 1:
             seg is clamp of [spec.spike_anchor[si], 0, seg_count - 1]
-            spos is segment_position of [seg, sx, sy, seg_spacing, fx, fy]
+            spos is segment_position of [seg, sx, sy, seg_spacing, fx, fy, spec.spine_bend]
             side is socket_side of si
             sp_in is clamp of [radius - 2, 3, radius]
             sp_out is radius + 6
@@ -316,7 +326,7 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
     for ei in range of max_sockets:
         if spec.eyes[ei] == 1:
             seg is clamp of [spec.eye_anchor[ei], 0, seg_count - 1]
-            epos is segment_position of [seg, sx, sy, seg_spacing, fx, fy]
+            epos is segment_position of [seg, sx, sy, seg_spacing, fx, fy, spec.spine_bend]
             side is socket_side of ei
             eye_offset is clamp of [floor of (radius / 3), 4, 16]
             ex is epos[0] + floor of (lx * side * eye_offset)

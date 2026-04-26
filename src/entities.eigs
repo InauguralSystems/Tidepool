@@ -69,7 +69,8 @@ define new_creature_spec() as:
         "spikes": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         "spike_anchor": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         "appendages": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        "appendage_anchor": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        "appendage_anchor": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "spine_bend": [1, 1, 1, 1, 1, 1]
     }
 
 # Generate a randomized creature spec for a given tier and diet

@@ -1341,6 +1341,7 @@ define save_creature(spec) as:
     lines is f"{lines}spike_anchors={_list_to_csv of spec.spike_anchor}\n"
     lines is f"{lines}appendages={_list_to_csv of spec.appendages}\n"
     lines is f"{lines}appendage_anchors={_list_to_csv of spec.appendage_anchor}\n"
+    lines is f"{lines}spine_bend={_list_to_csv of spec.spine_bend}\n"
     write_text of ["saves/creature_profile.txt", lines]
     return 1
 
@@ -1388,4 +1389,6 @@ define load_creature(spec) as:
                 spec.appendages is _csv_to_list of [val, 14]
             case "appendage_anchors":
                 spec.appendage_anchor is _csv_to_list of [val, 14]
+            case "spine_bend":
+                spec.spine_bend is _csv_to_list of [val, CREATURE_SPINE_JOINTS]
     return 1
