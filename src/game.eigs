@@ -74,11 +74,17 @@ define new_game(world_w, world_h, seed_val) as:
         # Creature
         "creature": new_creature_spec of null,
 
-        # Per-frame events (consumed by renderer, cleared next frame)
+        # Per-frame events (consumed by renderer and audio, cleared next frame)
         "event_kill_x": 0.0, "event_kill_y": 0.0,
         "event_kill_palette": 0,
         "event_collision_x": -1.0, "event_collision_y": -1.0,
         "event_collect_x": -1.0, "event_collect_y": -1.0,
+        # Boolean audio events
+        "event_ate_plant": 0, "event_ate_meat": 0,
+        "event_killed": 0, "event_died": 0,
+        "event_mate_call": 0, "event_part_collect": 0,
+        "event_tier_up": 0, "event_poison": 0,
+        "event_electric": 0, "event_jet": 0,
 
         # Entity lists
         "food": [],
@@ -181,6 +187,7 @@ define call_mate(game) as:
     game.mate_angle is 0.0
     game.mate_state is 2
     game.mate_timer is 0
+    game.event_mate_call is 1
     game.message is "Calling a mate..."
 
 define update_mate(game) as:
@@ -232,6 +239,7 @@ define evolve_tier_up(game) as:
     # Tier up
     if game.scale_tier < SCALE_TIER_COUNT - 1:
         game.scale_tier is game.scale_tier + 1
+        game.event_tier_up is 1
     game.tier_transition_timer is 120
     game.message is "A new world unfolds around you..."
 
@@ -341,6 +349,7 @@ define game_tick(game) as:
         if game.energy <= 0:
             game.game_over is 1
             game.game_over_reason is GAME_OVER_STARVED
+            game.event_died is 1
             game.message is "Starved to death"
             return game
 
@@ -358,6 +367,7 @@ define game_tick(game) as:
                 game.food_eaten is game.food_eaten + 1
                 game.plants_eaten is game.plants_eaten + 1
                 game.dna is game.dna + 1
+                game.event_ate_plant is 1
                 # Respawn food elsewhere
                 f.px is rand_range_f of [0, game.world_w]
                 f.py is rand_range_f of [0, game.world_h]
@@ -423,6 +433,7 @@ define game_tick(game) as:
                         game.event_kill_x is pred.px
                         game.event_kill_y is pred.py
                         game.event_kill_palette is pred.spec.palette
+                        game.event_killed is 1
                         # Drop meat into the pre-allocated pool
                         spawn_meat of [game.meat, pred.px, pred.py, 300]
                         # Part drop chance
@@ -430,6 +441,7 @@ define game_tick(game) as:
                 else:
                     # Player dies
                     game.game_over is 1
+                    game.event_died is 1
                     game.game_over_reason is GAME_OVER_CONSUMED
                     game.message is "Consumed by predator"
                     return game
@@ -455,6 +467,7 @@ define game_tick(game) as:
                     game.food_eaten is game.food_eaten + 1
                     game.meat_eaten is game.meat_eaten + 1
                     game.dna is game.dna + 2
+                    game.event_ate_meat is 1
                     game.event_collect_x is m.px
                     game.event_collect_y is m.py
 
@@ -494,6 +507,7 @@ define game_tick(game) as:
     if game.scale_tier < SCALE_TIER_COUNT - 1:
         if game.food_eaten >= (game.scale_tier + 1) * 10:
             game.scale_tier is game.scale_tier + 1
+            game.event_tier_up is 1
             game.message is ""
 
     # Update mate approach
@@ -551,6 +565,7 @@ define npc_combat(game) as:
                     game.event_kill_x is target.px
                     game.event_kill_y is target.py
                     game.event_kill_palette is target.spec.palette
+                    game.event_killed is 1
                     spawn_meat of [game.meat, target.px, target.py, 300]
                     # Respawn predator
                     target.px is rand_range_f of [0, game.world_w]
@@ -602,6 +617,7 @@ define player_auto_weapons(game) as:
                 game.event_kill_x is target.px
                 game.event_kill_y is target.py
                 game.event_kill_palette is target.spec.palette
+                game.event_killed is 1
                 game.score is game.score + 10 + target.size * 3
                 spawn_meat of [game.meat, target.px, target.py, 300]
                 try_drop_part of [game, target]
@@ -612,6 +628,7 @@ define player_auto_weapons(game) as:
                 target.vx is 0.0
                 target.vy is 0.0
             game.electric_cooldown is ELECTRIC_COOLDOWN_MAX
+            game.event_electric is 1
 
 # ============================================================
 # Poison cloud update
@@ -645,6 +662,7 @@ define update_poison_clouds(game) as:
                         game.event_kill_x is pred.px
                         game.event_kill_y is pred.py
                         game.event_kill_palette is pred.spec.palette
+                        game.event_killed is 1
                         game.score is game.score + 10 + pred.size * 3
                         spawn_meat of [game.meat, pred.px, pred.py, 300]
                         try_drop_part of [game, pred]
@@ -723,6 +741,7 @@ define update_epic_cells(game) as:
         if dist_sq < kill_range:
             game.game_over is 1
             game.game_over_reason is GAME_OVER_EPIC
+            game.event_died is 1
             game.message is "Devoured by a leviathan"
 
 # ============================================================
@@ -770,6 +789,7 @@ define update_part_drops(game) as:
             game.dna is game.dna + 5
             game.event_collect_x is pd.px
             game.event_collect_y is pd.py
+            game.event_part_collect is 1
             game.message is "Part collected! +5 DNA"
             continue
         append of [alive, pd]
@@ -789,6 +809,7 @@ define activate_jet(game) as:
         game.jet_active is JET_DURATION
         game.jet_cooldown is JET_COOLDOWN_MAX
         game.thrusting is 1
+        game.event_jet is 1
 
 # ============================================================
 # Poison activation (manual)
@@ -803,6 +824,7 @@ define activate_poison(game) as:
     if has_poison > 0:
         append of [game.poison_clouds, new_poison_cloud of [game.px, game.py, 1]]
         game.poison_cooldown is POISON_COOLDOWN_MAX
+        game.event_poison is 1
 
 # ============================================================
 # Electric activation (manual)
@@ -834,6 +856,7 @@ define activate_electric(game) as:
                 game.event_kill_x is target.px
                 game.event_kill_y is target.py
                 game.event_kill_palette is target.spec.palette
+                game.event_killed is 1
                 game.score is game.score + 10 + target.size * 3
                 spawn_meat of [game.meat, target.px, target.py, 300]
                 target.px is rand_range_f of [0, game.world_w]
@@ -842,6 +865,7 @@ define activate_electric(game) as:
                 target.vx is 0.0
                 target.vy is 0.0
             game.electric_cooldown is ELECTRIC_COOLDOWN_MAX
+            game.event_electric is 1
 
 # ============================================================
 # Clear per-frame events (call at start of tick)
@@ -854,6 +878,16 @@ define clear_events(game) as:
     game.event_collision_y is -1.0
     game.event_collect_x is -1.0
     game.event_collect_y is -1.0
+    game.event_ate_plant is 0
+    game.event_ate_meat is 0
+    game.event_killed is 0
+    game.event_died is 0
+    game.event_mate_call is 0
+    game.event_part_collect is 0
+    game.event_tier_up is 0
+    game.event_poison is 0
+    game.event_electric is 0
+    game.event_jet is 0
 
 # ============================================================
 # Input mapping

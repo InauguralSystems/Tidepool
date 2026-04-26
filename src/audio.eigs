@@ -1,0 +1,139 @@
+# ============================================================
+# Audio — procedural sound effects and ambient audio
+# ============================================================
+# Ported from sporelike-c/src/audio.c
+# All sounds generated at init using EigenScript audio builtins.
+# GAP: No frequency sweep builtin — C version sweeps continuously,
+#      we approximate with short chained tones at stepped frequencies.
+# GAP: No loop playback — ambient must be re-queued manually.
+
+AUDIO_RATE is 22050
+AUDIO_CHANNELS is 1
+
+# Pre-generated sound buffers (populated by audio_game_init)
+_sounds is {}
+_audio_ready is 0
+_ambient_samples is null
+
+# Generate a frequency sweep by chaining short tone segments.
+# This approximates C's generate_tone(freq_start, freq_end, duration, volume, waveform).
+# waveform: 0 = sine, 1 = sawtooth
+define generate_sweep(freq_start, freq_end, duration, volume, waveform) as:
+    steps is 8
+    step_dur is duration / steps
+    result is []
+    for i in range of steps:
+        t is i / steps
+        freq is freq_start + (freq_end - freq_start) * t
+        if waveform == 0:
+            seg is audio_sine of [freq, step_dur, volume]
+        else:
+            seg is audio_saw of [freq, step_dur, volume]
+        result is concat of [result, seg]
+    # Apply linear decay envelope (attack=0, decay=duration, sustain=0, release=0)
+    result is audio_envelope of [result, 0.001, duration * 0.9, 0.1, duration * 0.09]
+    return result
+
+define audio_game_init() as:
+    dev is audio_open of [AUDIO_RATE, AUDIO_CHANNELS]
+    if dev == 0:
+        print of "Audio: failed to open device"
+        return null
+
+    # Generate all sound effects (matching C audio.c parameters)
+    # eat_plant: sine 200->600Hz, 80ms, vol 0.6
+    dict_set of [_sounds, "eat_plant", generate_sweep of [200, 600, 0.08, 0.6, 0]]
+    # eat_meat: saw 150->60Hz, 120ms, vol 0.7
+    dict_set of [_sounds, "eat_meat", generate_sweep of [150, 60, 0.12, 0.7, 1]]
+    # kill: sine 400->100Hz, 150ms, vol 0.8
+    dict_set of [_sounds, "kill", generate_sweep of [400, 100, 0.15, 0.8, 0]]
+    # death: saw 300->50Hz, 500ms, vol 0.9
+    dict_set of [_sounds, "death", generate_sweep of [300, 50, 0.5, 0.9, 1]]
+    # danger: sine 60->80Hz, 800ms, vol 0.4
+    dict_set of [_sounds, "danger", generate_sweep of [60, 80, 0.8, 0.4, 0]]
+    # mate_call: sine 200->800Hz, 300ms, vol 0.5
+    dict_set of [_sounds, "mate_call", generate_sweep of [200, 800, 0.3, 0.5, 0]]
+    # part_collect: sine 400->1200Hz, 150ms, vol 0.6
+    dict_set of [_sounds, "part_collect", generate_sweep of [400, 1200, 0.15, 0.6, 0]]
+    # poison: saw 80->120Hz, 200ms, vol 0.5
+    dict_set of [_sounds, "poison", generate_sweep of [80, 120, 0.2, 0.5, 1]]
+    # electric: noise 100ms, vol 0.8
+    dict_set of [_sounds, "electric", audio_envelope of [audio_noise of [0.1, 0.8], 0.005, 0.02, 0.6, 0.02]]
+    # jet: saw 500->100Hz, 150ms, vol 0.7
+    dict_set of [_sounds, "jet", generate_sweep of [500, 100, 0.15, 0.7, 1]]
+    # tier_up: sine 300->900Hz, 400ms, vol 0.7
+    dict_set of [_sounds, "tier_up", generate_sweep of [300, 900, 0.4, 0.7, 0]]
+
+    # Ambient: filtered noise loop, 2 seconds, low volume
+    # GAP: No loop playback — we re-queue when buffer runs low
+    _ambient_samples is audio_gain of [audio_noise of [2.0, 0.3], 0.15]
+
+    _audio_ready is 1
+    print of "Audio: initialized"
+
+define audio_play_sound(name) as:
+    if _audio_ready != 1:
+        return null
+    if has_key of [_sounds, name]:
+        audio_play of _sounds[name]
+
+# Check game event flags and play corresponding sounds.
+# Also handles ambient loop re-queuing and danger proximity audio.
+define audio_game_update(game) as:
+    if _audio_ready != 1:
+        return null
+
+    # Event-triggered sounds
+    if game.event_ate_plant == 1:
+        audio_play_sound of "eat_plant"
+    if game.event_ate_meat == 1:
+        audio_play_sound of "eat_meat"
+    if game.event_killed == 1:
+        audio_play_sound of "kill"
+    if game.event_died == 1:
+        audio_play_sound of "death"
+    if game.event_mate_call == 1:
+        audio_play_sound of "mate_call"
+    if game.event_part_collect == 1:
+        audio_play_sound of "part_collect"
+    if game.event_tier_up == 1:
+        audio_play_sound of "tier_up"
+    if game.event_poison == 1:
+        audio_play_sound of "poison"
+    if game.event_electric == 1:
+        audio_play_sound of "electric"
+    if game.event_jet == 1:
+        audio_play_sound of "jet"
+
+    # Ambient loop: re-queue when buffer is running low
+    # GAP: No native loop playback — polling queue size as workaround
+    if _ambient_samples != null:
+        queued is audio_queue_size of null
+        if queued < AUDIO_RATE * 2:
+            audio_play of _ambient_samples
+
+    # Danger proximity audio: play danger tone when threat is near
+    # GAP: No per-channel volume control — we pre-scale the buffer
+    if game.game_over != 1:
+        sense is creature_sense_range of [game.creature, game.sense_level]
+        nearest_dist is 999.0
+        for i in range of (len of game.predators):
+            p is game.predators[i]
+            if p.active == 1:
+                d is torus_dist of [game.px, game.py, p.px, p.py, game.world_w, game.world_h]
+                if d < nearest_dist:
+                    nearest_dist is d
+        if nearest_dist < sense and sense > 0:
+            proximity is 1.0 - nearest_dist / sense
+            vol is proximity * 0.6
+            if vol > 0.05:
+                danger_scaled is audio_gain of [_sounds["danger"], vol]
+                # Only play if not already queued heavily
+                queued is audio_queue_size of null
+                if queued < AUDIO_RATE * 4:
+                    audio_play of danger_scaled
+
+define audio_game_shutdown() as:
+    if _audio_ready == 1:
+        audio_close of null
+        _audio_ready is 0

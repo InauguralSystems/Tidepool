@@ -19,6 +19,7 @@
 
 load_file of "src/game.eigs"
 load_file of "src/neural.eigs"
+load_file of "src/audio.eigs"
 
 # ============================================================
 # CLI argument parsing
@@ -128,6 +129,7 @@ STATE_EDITOR is 4
 # Open window
 # ============================================================
 result is gfx_open of [WINDOW_W, WINDOW_H, "Tidepool"]
+audio_game_init of null
 running is 1
 if result == 0:
     print of "Failed to open graphics window"
@@ -960,6 +962,7 @@ loop while running == 1:
             else:
                 apply_held_keys of [game, keys_held]
             game_tick of game
+            audio_game_update of game
             update_hud of game
 
             # Check for tier-up toast
@@ -1037,6 +1040,7 @@ loop while running == 1:
     # Frame timing
     gfx_delay of 1
 
+audio_game_shutdown of null
 gfx_close of null
 if game != null:
     print of f"Game over: {game.message}"
