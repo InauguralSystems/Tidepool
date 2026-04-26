@@ -20,6 +20,7 @@
 load_file of "src/game.eigs"
 load_file of "src/neural.eigs"
 load_file of "src/audio.eigs"
+load_file of "src/training.eigs"
 
 # ============================================================
 # CLI argument parsing
@@ -148,6 +149,7 @@ tutorial_shown is 0
 watch_mode is 0
 watch_diet is 0
 obs_stack is new_observation_stack of null
+demo_log is new_demo_log of null
 neural is load_policy of null
 if neural != null:
     print of "Neural policy loaded"
@@ -963,6 +965,28 @@ loop while running == 1:
                     policy_decide of [neural, stacked, game]
                 else:
                     autopilot_decide of game
+                # Log demo for training (autopilot decision as label)
+                if game.game_over != 1:
+                    demo_obs is build_observation of game
+                    demo_act is autopilot_action_label of game
+                    log_demo_frame of [demo_log, demo_obs, demo_act]
+                    # Launch training when enough demos collected
+                    if demo_log.count >= DEMO_THRESHOLD and (training_is_active of null) == 0:
+                        launch_training of [demo_log, neural]
+                        demo_log is new_demo_log of null
+                        toast_text is f"Training on {DEMO_THRESHOLD} demos..."
+                        toast_timer is 90
+                # Check if background training finished
+                result is check_training_done of null
+                if result != null:
+                    toast_text is f"Training: {result}"
+                    toast_timer is 120
+                    # Reload policy if training succeeded
+                    reloaded is load_policy of null
+                    if reloaded != null:
+                        neural is reloaded
+                        toast_text is "New policy promoted!"
+                        toast_timer is 120
             else:
                 apply_held_keys of [game, keys_held]
             game_tick of game

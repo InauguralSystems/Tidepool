@@ -1304,6 +1304,19 @@ define autopilot_decide(game) as:
         game.turning is roll - 1
     return null
 
+# Read current control state and return an action label (0-4)
+# Call AFTER autopilot_decide to read what it decided.
+define autopilot_action_label(game) as:
+    if game.thrusting == 1 and game.turning == -1:
+        return 2
+    if game.thrusting == 1 and game.turning == 1:
+        return 3
+    if game.thrusting == 1:
+        return 1
+    if game.braking == 1:
+        return 4
+    return 0
+
 # ============================================================
 # Creature save / load  (format compatible with C version)
 # ============================================================

@@ -29,3 +29,15 @@ a real limitation hit during non-trivial game development.
 - Workaround: Run expensive searches (food-seeking, NPC hunting, boid flocking) only on retarget ticks (~every 30-90 frames) instead of every tick. Use distance-squared comparisons to avoid `sqrt`. Still 4x slower than simple wander AI (50ms vs 12ms per tick with 8 predators + 52 food).
 - Note: Also blocks expanding observation from 20 to 107 features (9x9 spatial grid) which would add more entity iteration loops.
 - Proper fix: Bytecode compilation or JIT for hot loops. Each `torus_delta`/`torus_dist_sq` call inside a nested loop goes through full interpreter dispatch. With 8 predators × 52 food items, that's ~400 function calls per retarget tick. The `unobserved` block helps with observer overhead but not dispatch cost. A batch distance builtin (e.g., `nearest_in_range of [entities, x, y, range, world_w, world_h]`) returning index+distance would also help.
+
+## GAP-005: No non-blocking channel receive
+- Found during: Interactive Training UI (Phase 7)
+- Severity: High
+- Workaround: Training thread writes result to a file. Main thread polls `file_exists` + `read_text` (non-blocking) instead of `recv`. Clunky but avoids blocking the game loop.
+- Proper fix: Add `try_recv of channel` that returns null immediately if empty (non-blocking), or `recv_timeout of [channel, ms]`. This is essential for any real-time application (game loops, UI threads) that needs to check for messages without stalling.
+
+## GAP-006: spawn takes no arguments
+- Found during: Interactive Training UI (Phase 7)
+- Severity: Medium
+- Workaround: Save training data to file before spawning. Training thread reads from file instead of receiving data as arguments.
+- Proper fix: `spawn of [fn, arg1, arg2, ...]` that deep-copies arguments and passes them to the function. Or support closures that capture local variables by value.
