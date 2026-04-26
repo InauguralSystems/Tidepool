@@ -18,6 +18,7 @@
 #   eigenscript tidepool.eigs --demo 500 --seed 42 --batch 20
 
 load_file of "src/game.eigs"
+load_file of "src/neural.eigs"
 
 # ============================================================
 # CLI argument parsing
@@ -144,6 +145,9 @@ toast_timer is 0
 tutorial_shown is 0
 watch_mode is 0
 watch_diet is 0
+neural is load_policy of null
+if neural != null:
+    print of "Neural policy loaded"
 
 # High score
 high_score is 0
@@ -811,7 +815,10 @@ loop while running == 1:
                         case "tab":
                             if watch_mode == 0:
                                 watch_mode is 1
-                                toast_text is "Watch mode: ON"
+                                if neural != null:
+                                    toast_text is "Watch mode: ON [neural]"
+                                else:
+                                    toast_text is "Watch mode: ON [autopilot]"
                                 toast_timer is 90
                             else:
                                 watch_mode is 0
@@ -945,7 +952,11 @@ loop while running == 1:
     if game_state == STATE_PLAYING:
         if game != null:
             if watch_mode == 1:
-                autopilot_decide of game
+                if neural != null:
+                    obs is build_observation of game
+                    policy_decide of [neural, obs, game]
+                else:
+                    autopilot_decide of game
             else:
                 apply_held_keys of [game, keys_held]
             game_tick of game
@@ -984,7 +995,10 @@ loop while running == 1:
     elif game_state == STATE_PLAYING:
         if game != null:
             if watch_mode == 1:
-                gfx_title of "Tidepool [AI:auto]"
+                if neural != null:
+                    gfx_title of "Tidepool [AI:neural]"
+                else:
+                    gfx_title of "Tidepool [AI:auto]"
             else:
                 gfx_title of "Tidepool"
             try:

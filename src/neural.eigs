@@ -1,0 +1,272 @@
+# ============================================================
+# Neural Policy — MLP inference and training for Tidepool
+# ============================================================
+# Architecture: obs(20) -> hidden1(64, ReLU) -> hidden2(32, ReLU) -> actions(5)
+# Actions: 0=nothing, 1=thrust, 2=turn_left, 3=turn_right, 4=brake
+
+# Requires: constants.eigs, math_utils.eigs, entities.eigs, game.eigs
+# (loaded by game.eigs — load game.eigs before this file)
+
+NEURAL_OBS_SIZE is 20
+NEURAL_HIDDEN1 is 64
+NEURAL_HIDDEN2 is 32
+NEURAL_ACTIONS is 5
+
+POLICY_PATH is "models/policy.txt"
+
+# ============================================================
+# Weight initialization
+# ============================================================
+
+define xavier_init(fan_in, fan_out) as:
+    limit is sqrt of (6.0 / (fan_in + fan_out))
+    rows is fan_in
+    cols is fan_out
+    w is []
+    for r in range of rows:
+        row is []
+        for c in range of cols:
+            val is (random of null) * 2.0 * limit - limit
+            append of [row, val]
+        append of [w, row]
+    return w
+
+define zeros_1d(n) as:
+    result is []
+    for i in range of n:
+        append of [result, 0.0]
+    return result
+
+# ============================================================
+# Policy constructor
+# ============================================================
+
+define new_policy() as:
+    return {
+        "w1": xavier_init of [NEURAL_OBS_SIZE, NEURAL_HIDDEN1],
+        "b1": zeros_1d of NEURAL_HIDDEN1,
+        "w2": xavier_init of [NEURAL_HIDDEN1, NEURAL_HIDDEN2],
+        "b2": zeros_1d of NEURAL_HIDDEN2,
+        "w3": xavier_init of [NEURAL_HIDDEN2, NEURAL_ACTIONS],
+        "b3": zeros_1d of NEURAL_ACTIONS,
+        "loaded": 0
+    }
+
+# ============================================================
+# Forward pass
+# ============================================================
+
+define policy_forward(policy, obs) as:
+    h1 is relu of (add of [(matmul of [obs, policy.w1]), policy.b1])
+    h2 is relu of (add of [(matmul of [h1, policy.w2]), policy.b2])
+    out is add of [(matmul of [h2, policy.w3]), policy.b3]
+    return out
+
+define argmax(lst) as:
+    best is 0
+    for i in range of (len of lst):
+        if lst[i] > lst[best]:
+            best is i
+    return best
+
+define policy_decide(policy, obs, game) as:
+    q is policy_forward of [policy, obs]
+    action is argmax of q
+    # action: 0=nothing, 1=thrust, 2=turn_left, 3=turn_right, 4=brake
+    game.thrusting is 0
+    game.braking is 0
+    game.turning is 0
+    match action:
+        case 1:
+            game.thrusting is 1
+        case 2:
+            game.turning is -1
+            game.thrusting is 1
+        case 3:
+            game.turning is 1
+            game.thrusting is 1
+        case 4:
+            game.braking is 1
+    # Also buy mutations like the hand-coded autopilot
+    buy is autopilot_buy_mutation of game
+    if buy > 0:
+        game_action of [game, buy]
+    return action
+
+# ============================================================
+# Observation builder — extract features from game state
+# ============================================================
+
+define build_observation(game) as:
+    obs is zeros_1d of NEURAL_OBS_SIZE
+    sense_range is creature_sense_range of [game.creature, game.sense_level]
+    my_power is creature_collision_power of [game.creature, game.spikes_level, game.mass]
+
+    # Player state (0-5)
+    obs[0] is game.energy / 200.0
+    obs[1] is game.mass / 20.0
+    obs[2] is game.speed_level / 5.0
+    obs[3] is game.sense_level / 5.0
+    obs[4] is game.spikes_level / 5.0
+    obs[5] is game.dna / 20.0
+
+    # Velocity (6-8)
+    speed is sqrt of (game.vx * game.vx + game.vy * game.vy)
+    obs[6] is speed / 5.0
+    # Angle of movement relative to facing
+    if speed > 0.01:
+        move_angle is atan2 of [game.vy, game.vx]
+        obs[7] is (angle_diff of [game.angle, move_angle]) / 3.14159
+    obs[8] is game.angle / 3.14159
+
+    # Nearest food (9-11)
+    best_food_dist is 99999.0
+    best_food_angle is 0.0
+    for i in range of (len of game.food):
+        if game.food[i].active == 1:
+            d is torus_dist of [game.px, game.py, game.food[i].px, game.food[i].py, game.world_w, game.world_h]
+            if d < best_food_dist:
+                best_food_dist is d
+                dx is torus_delta of [game.px, game.food[i].px, game.world_w]
+                dy is torus_delta of [game.py, game.food[i].py, game.world_h]
+                best_food_angle is angle_diff of [game.angle, atan2 of [dy, dx]]
+    if best_food_dist < 99999.0:
+        obs[9] is 1.0
+        if sense_range > 0:
+            obs[10] is best_food_dist / sense_range
+        obs[11] is best_food_angle / 3.14159
+
+    # Nearest threat (12-15)
+    best_threat_dist is 99999.0
+    best_threat_angle is 0.0
+    best_threat_power is 0.0
+    for i in range of (len of game.predators):
+        p is game.predators[i]
+        if p.active == 1:
+            if p.spec != null:
+                d is torus_dist of [game.px, game.py, p.px, p.py, game.world_w, game.world_h]
+                pp is creature_collision_power of [p.spec, 0, p.size]
+                if pp > my_power:
+                    if d < best_threat_dist:
+                        best_threat_dist is d
+                        dx is torus_delta of [game.px, p.px, game.world_w]
+                        dy is torus_delta of [game.py, p.py, game.world_h]
+                        best_threat_angle is angle_diff of [game.angle, atan2 of [dy, dx]]
+                        best_threat_power is pp
+    if best_threat_dist < 99999.0:
+        obs[12] is 1.0
+        if sense_range > 0:
+            obs[13] is best_threat_dist / sense_range
+        obs[14] is best_threat_angle / 3.14159
+        if my_power > 0:
+            obs[15] is best_threat_power / (my_power + best_threat_power)
+
+    # Nearest meat (16-18)
+    best_meat_dist is 99999.0
+    best_meat_angle is 0.0
+    for i in range of (len of game.meat):
+        if game.meat[i].active == 1:
+            d is torus_dist of [game.px, game.py, game.meat[i].px, game.meat[i].py, game.world_w, game.world_h]
+            if d < best_meat_dist:
+                best_meat_dist is d
+                dx is torus_delta of [game.px, game.meat[i].px, game.world_w]
+                dy is torus_delta of [game.py, game.meat[i].py, game.world_h]
+                best_meat_angle is angle_diff of [game.angle, atan2 of [dy, dx]]
+    if best_meat_dist < 99999.0:
+        obs[16] is 1.0
+        if sense_range > 0:
+            obs[17] is best_meat_dist / sense_range
+        obs[18] is best_meat_angle / 3.14159
+
+    # Scale tier (19)
+    obs[19] is game.scale_tier / 4.0
+
+    return obs
+
+# ============================================================
+# Save / load weights as text (one float per line)
+# ============================================================
+
+define _flatten_weights(policy) as:
+    flat is []
+    # w1 (rows x cols)
+    for r in range of (len of policy.w1):
+        for c in range of (len of policy.w1[r]):
+            append of [flat, policy.w1[r][c]]
+    # b1
+    for i in range of (len of policy.b1):
+        append of [flat, policy.b1[i]]
+    # w2
+    for r in range of (len of policy.w2):
+        for c in range of (len of policy.w2[r]):
+            append of [flat, policy.w2[r][c]]
+    # b2
+    for i in range of (len of policy.b2):
+        append of [flat, policy.b2[i]]
+    # w3
+    for r in range of (len of policy.w3):
+        for c in range of (len of policy.w3[r]):
+            append of [flat, policy.w3[r][c]]
+    # b3
+    for i in range of (len of policy.b3):
+        append of [flat, policy.b3[i]]
+    return flat
+
+define save_policy(policy) as:
+    mkdir of "models"
+    flat is _flatten_weights of policy
+    text is ""
+    for i in range of (len of flat):
+        text is f"{text}{flat[i]}\n"
+    write_text of [POLICY_PATH, text]
+    return 1
+
+define _unflatten_weights(flat) as:
+    policy is new_policy of null
+    idx is 0
+    # w1: NEURAL_OBS_SIZE x NEURAL_HIDDEN1
+    for r in range of NEURAL_OBS_SIZE:
+        for c in range of NEURAL_HIDDEN1:
+            policy.w1[r][c] is flat[idx]
+            idx is idx + 1
+    # b1: NEURAL_HIDDEN1
+    for i in range of NEURAL_HIDDEN1:
+        policy.b1[i] is flat[idx]
+        idx is idx + 1
+    # w2: NEURAL_HIDDEN1 x NEURAL_HIDDEN2
+    for r in range of NEURAL_HIDDEN1:
+        for c in range of NEURAL_HIDDEN2:
+            policy.w2[r][c] is flat[idx]
+            idx is idx + 1
+    # b2: NEURAL_HIDDEN2
+    for i in range of NEURAL_HIDDEN2:
+        policy.b2[i] is flat[idx]
+        idx is idx + 1
+    # w3: NEURAL_HIDDEN2 x NEURAL_ACTIONS
+    for r in range of NEURAL_HIDDEN2:
+        for c in range of NEURAL_ACTIONS:
+            policy.w3[r][c] is flat[idx]
+            idx is idx + 1
+    # b3: NEURAL_ACTIONS
+    for i in range of NEURAL_ACTIONS:
+        policy.b3[i] is flat[idx]
+        idx is idx + 1
+    policy.loaded is 1
+    return policy
+
+define load_policy() as:
+    if file_exists of POLICY_PATH == 0:
+        return null
+    text is read_text of POLICY_PATH
+    if (len of text) == 0:
+        return null
+    lines is split of [text, "\n"]
+    flat is []
+    for i in range of (len of lines):
+        if (len of lines[i]) > 0:
+            append of [flat, num of lines[i]]
+    expected is (NEURAL_OBS_SIZE * NEURAL_HIDDEN1) + NEURAL_HIDDEN1 + (NEURAL_HIDDEN1 * NEURAL_HIDDEN2) + NEURAL_HIDDEN2 + (NEURAL_HIDDEN2 * NEURAL_ACTIONS) + NEURAL_ACTIONS
+    if (len of flat) != expected:
+        print of f"Policy file has {len of flat} weights, expected {expected}"
+        return null
+    return _unflatten_weights of flat
