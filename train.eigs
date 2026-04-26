@@ -1,0 +1,456 @@
+# ============================================================
+# Tidepool DQN Training — pure EigenScript, no Python needed
+# ============================================================
+#
+# Usage:
+#   eigenscript train.eigs --episodes 1000 --seed 42
+#   eigenscript train.eigs --episodes 5000 --lr 0.001
+
+load_file of "src/game.eigs"
+load_file of "src/neural.eigs"
+
+# ============================================================
+# Training hyperparameters
+# ============================================================
+
+define parse_train_args() as:
+    argv is args of null
+    result is {
+        "episodes": 1000,
+        "seed": -1,
+        "lr": 0.001,
+        "gamma": 0.99,
+        "epsilon_start": 1.0,
+        "epsilon_end": 0.05,
+        "epsilon_decay": 0.9995,
+        "batch_size": 8,
+        "buffer_size": 5000,
+        "target_update": 100,
+        "tick_limit": 300
+    }
+    i is 0
+    loop while i < (len of argv):
+        if argv[i] == "--episodes":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.episodes is floor of (num of argv[i])
+        elif argv[i] == "--seed":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.seed is floor of (num of argv[i])
+        elif argv[i] == "--lr":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.lr is num of argv[i]
+        i is i + 1
+    return result
+
+hp is parse_train_args of null
+if hp.seed >= 0:
+    seed_random of hp.seed
+
+# ============================================================
+# Transpose helper
+# ============================================================
+
+define transpose(m) as:
+    rows is len of m
+    cols is len of m[0]
+    result is []
+    for c in range of cols:
+        row is []
+        for r in range of rows:
+            append of [row, m[r][c]]
+        append of [result, row]
+    return result
+
+# ============================================================
+# Replay buffer (circular)
+# ============================================================
+
+define new_buffer(capacity) as:
+    return {
+        "obs": [],
+        "actions": [],
+        "rewards": [],
+        "next_obs": [],
+        "dones": [],
+        "capacity": capacity,
+        "pos": 0,
+        "size": 0
+    }
+
+define buffer_add(buf, obs, action, reward, next_obs, done) as:
+    if buf.size < buf.capacity:
+        append of [buf.obs, obs]
+        append of [buf.actions, action]
+        append of [buf.rewards, reward]
+        append of [buf.next_obs, next_obs]
+        append of [buf.dones, done]
+        buf.size is buf.size + 1
+    else:
+        buf.obs[buf.pos] is obs
+        buf.actions[buf.pos] is action
+        buf.rewards[buf.pos] is reward
+        buf.next_obs[buf.pos] is next_obs
+        buf.dones[buf.pos] is done
+    buf.pos is (buf.pos + 1) % buf.capacity
+
+define buffer_sample(buf, batch_size) as:
+    obs is []
+    actions is []
+    rewards is []
+    next_obs is []
+    dones is []
+    for i in range of batch_size:
+        idx is random_int of [0, buf.size - 1]
+        append of [obs, buf.obs[idx]]
+        append of [actions, buf.actions[idx]]
+        append of [rewards, buf.rewards[idx]]
+        append of [next_obs, buf.next_obs[idx]]
+        append of [dones, buf.dones[idx]]
+    return [obs, actions, rewards, next_obs, dones]
+
+# ============================================================
+# Forward pass with cache (for backprop)
+# ============================================================
+
+define forward_cached(policy, obs_batch) as:
+    # obs_batch: list of observation vectors
+    # Returns [q_values, cache]
+    z1 is add of [(matmul of [obs_batch, policy.w1]), policy.b1]
+    a1 is relu of z1
+    z2 is add of [(matmul of [a1, policy.w2]), policy.b2]
+    a2 is relu of z2
+    q is add of [(matmul of [a2, policy.w3]), policy.b3]
+    return [q, [obs_batch, z1, a1, z2, a2]]
+
+# ============================================================
+# Backpropagation — compute gradients and update weights
+# ============================================================
+
+define train_step(online, target, buf, hp) as:
+    if buf.size < hp.batch_size:
+        return -1.0
+
+    sample is buffer_sample of [buf, hp.batch_size]
+    obs is sample[0]
+    actions is sample[1]
+    rewards is sample[2]
+    next_obs is sample[3]
+    dones is sample[4]
+
+    # Forward on online network
+    result is forward_cached of [online, obs]
+    q_all is result[0]
+    cache is result[1]
+
+    # Forward on target network for next states
+    t_result is forward_cached of [target, next_obs]
+    q_next is t_result[0]
+
+    # Compute TD targets and error gradient
+    bs is hp.batch_size
+    dq is zeros of [bs, NEURAL_ACTIONS]
+    loss is 0.0
+
+    for i in range of bs:
+        # Max Q of next state
+        max_q is q_next[i][0]
+        for a in range of NEURAL_ACTIONS:
+            if q_next[i][a] > max_q:
+                max_q is q_next[i][a]
+
+        # TD target
+        td_target is rewards[i] + hp.gamma * max_q * (1.0 - dones[i])
+
+        # TD error for taken action
+        a_taken is actions[i]
+        td_err is q_all[i][a_taken] - td_target
+        loss is loss + td_err * td_err
+
+        # Gradient: only for taken action
+        dq[i][a_taken] is (2.0 / bs) * td_err
+
+    loss is loss / bs
+
+    # Backprop through layers
+    x is cache[0]
+    z1 is cache[1]
+    a1 is cache[2]
+    z2 is cache[3]
+    a2 is cache[4]
+
+    # Pre-compute transposed weights (avoids recomputing in hot loop)
+    w3t is transpose of online.w3
+    w2t is transpose of online.w2
+
+    # Layer 3: a2 -> q
+    a2t is transpose of a2
+    dw3 is matmul of [a2t, dq]
+    db3 is []
+    for c in range of NEURAL_ACTIONS:
+        s is 0.0
+        for r in range of bs:
+            s is s + dq[r][c]
+        append of [db3, s]
+    da2 is matmul of [dq, w3t]
+
+    # ReLU backward for layer 2 (fused with multiply)
+    dz2 is multiply of [da2, (relu of z2)]
+    # Normalize relu output to 0/1 mask: any positive z2 -> 1
+    for i in range of bs:
+        for j in range of NEURAL_HIDDEN2:
+            if z2[i][j] > 0:
+                dz2[i][j] is da2[i][j]
+            else:
+                dz2[i][j] is 0.0
+
+    # Layer 2: a1 -> z2
+    a1t is transpose of a1
+    dw2 is matmul of [a1t, dz2]
+    db2 is []
+    for c in range of NEURAL_HIDDEN2:
+        s is 0.0
+        for r in range of bs:
+            s is s + dz2[r][c]
+        append of [db2, s]
+    da1 is matmul of [dz2, w2t]
+
+    # ReLU backward for layer 1
+    for i in range of bs:
+        for j in range of NEURAL_HIDDEN1:
+            if z1[i][j] <= 0:
+                da1[i][j] is 0.0
+
+    # Layer 1: x -> z1
+    xt is transpose of x
+    dw1 is matmul of [xt, da1]
+    db1 is []
+    for c in range of NEURAL_HIDDEN1:
+        s is 0.0
+        for r in range of bs:
+            s is s + da1[r][c]
+        append of [db1, s]
+
+    # SGD update with gradient clipping
+    lr is hp.lr
+
+    # Update w1
+    for r in range of NEURAL_OBS_SIZE:
+        for c in range of NEURAL_HIDDEN1:
+            g is dw1[r][c]
+            if g > 1.0:
+                g is 1.0
+            elif g < -1.0:
+                g is -1.0
+            online.w1[r][c] is online.w1[r][c] - lr * g
+    # Update b1
+    for i in range of NEURAL_HIDDEN1:
+        g is db1[i]
+        if g > 1.0:
+            g is 1.0
+        elif g < -1.0:
+            g is -1.0
+        online.b1[i] is online.b1[i] - lr * g
+
+    # Update w2
+    for r in range of NEURAL_HIDDEN1:
+        for c in range of NEURAL_HIDDEN2:
+            g is dw2[r][c]
+            if g > 1.0:
+                g is 1.0
+            elif g < -1.0:
+                g is -1.0
+            online.w2[r][c] is online.w2[r][c] - lr * g
+    # Update b2
+    for i in range of NEURAL_HIDDEN2:
+        g is db2[i]
+        if g > 1.0:
+            g is 1.0
+        elif g < -1.0:
+            g is -1.0
+        online.b2[i] is online.b2[i] - lr * g
+
+    # Update w3
+    for r in range of NEURAL_HIDDEN2:
+        for c in range of NEURAL_ACTIONS:
+            g is dw3[r][c]
+            if g > 1.0:
+                g is 1.0
+            elif g < -1.0:
+                g is -1.0
+            online.w3[r][c] is online.w3[r][c] - lr * g
+    # Update b3
+    for i in range of NEURAL_ACTIONS:
+        g is db3[i]
+        if g > 1.0:
+            g is 1.0
+        elif g < -1.0:
+            g is -1.0
+        online.b3[i] is online.b3[i] - lr * g
+
+    return loss
+
+# ============================================================
+# Copy weights from online to target network
+# ============================================================
+
+define copy_weights(src, dst) as:
+    for r in range of (len of src.w1):
+        for c in range of (len of src.w1[r]):
+            dst.w1[r][c] is src.w1[r][c]
+    for i in range of (len of src.b1):
+        dst.b1[i] is src.b1[i]
+    for r in range of (len of src.w2):
+        for c in range of (len of src.w2[r]):
+            dst.w2[r][c] is src.w2[r][c]
+    for i in range of (len of src.b2):
+        dst.b2[i] is src.b2[i]
+    for r in range of (len of src.w3):
+        for c in range of (len of src.w3[r]):
+            dst.w3[r][c] is src.w3[r][c]
+    for i in range of (len of src.b3):
+        dst.b3[i] is src.b3[i]
+
+# ============================================================
+# Reward function
+# ============================================================
+
+define compute_reward(game, prev_score, prev_energy) as:
+    r is 0.0
+    # Food eaten since last tick
+    if game.score > prev_score:
+        r is r + 10.0
+    # Energy change (small penalty for losing energy)
+    if game.energy < prev_energy:
+        r is r - 0.1
+    # Death penalty
+    if game.game_over == 1:
+        r is r - 20.0
+    # Small survival bonus
+    r is r + 0.01
+    return r
+
+# ============================================================
+# Training loop
+# ============================================================
+
+print of f"=== Tidepool DQN Training ==="
+print of f"Episodes: {hp.episodes}, LR: {hp.lr}, Batch: {hp.batch_size}"
+print of f"Buffer: {hp.buffer_size}, Target update: {hp.target_update}"
+print of "---"
+
+online is new_policy of null
+target_net is new_policy of null
+copy_weights of [online, target_net]
+buf is new_buffer of hp.buffer_size
+
+epsilon is hp.epsilon_start
+step_count is 0
+best_avg_score is -9999.0
+recent_scores is []
+recent_lengths is []
+
+for ep in range of hp.episodes:
+    game is new_game of [60.0, 30.0, random_int of [1, 99999]]
+    obs is build_observation of game
+    ep_return is 0.0
+    ep_length is 0
+    prev_score is 0
+    prev_energy is game.energy
+
+    for tick in range of hp.tick_limit:
+        # Epsilon-greedy action selection
+        if (random of null) < epsilon:
+            action is random_int of [0, NEURAL_ACTIONS - 1]
+        else:
+            q is policy_forward of [online, obs]
+            action is argmax of q
+
+        # Apply action to game
+        game.thrusting is 0
+        game.braking is 0
+        game.turning is 0
+        if action == 1:
+            game.thrusting is 1
+        elif action == 2:
+            game.turning is -1
+            game.thrusting is 1
+        elif action == 3:
+            game.turning is 1
+            game.thrusting is 1
+        elif action == 4:
+            game.braking is 1
+
+        # Also buy mutations
+        buy is autopilot_buy_mutation of game
+        if buy > 0:
+            game_action of [game, buy]
+
+        game_tick of game
+
+        # Build next observation and reward
+        next_obs is build_observation of game
+        reward is compute_reward of [game, prev_score, prev_energy]
+        done is game.game_over
+        prev_score is game.score
+        prev_energy is game.energy
+
+        # Store transition
+        buffer_add of [buf, obs, action, reward, next_obs, done]
+        obs is next_obs
+        ep_return is ep_return + reward
+        ep_length is ep_length + 1
+        step_count is step_count + 1
+
+        # Train every 4 steps (interpreted EigenScript is slower than C)
+        if buf.size >= hp.batch_size:
+            if step_count % 4 == 0:
+                train_step of [online, target_net, buf, hp]
+
+        # Update target network periodically
+        if step_count % hp.target_update == 0:
+            copy_weights of [online, target_net]
+
+        if done == 1:
+            break
+
+    # Decay epsilon
+    epsilon is epsilon * hp.epsilon_decay
+    if epsilon < hp.epsilon_end:
+        epsilon is hp.epsilon_end
+
+    # Track stats
+    append of [recent_scores, game.score]
+    append of [recent_lengths, ep_length]
+    if (len of recent_scores) > 50:
+        recent_scores is []
+        recent_lengths is []
+
+    # Print every 50 episodes
+    if (ep + 1) % 50 == 0:
+        avg_score is 0.0
+        avg_len is 0.0
+        for i in range of (len of recent_scores):
+            avg_score is avg_score + recent_scores[i]
+            avg_len is avg_len + recent_lengths[i]
+        n is len of recent_scores
+        if n > 0:
+            avg_score is avg_score / n
+            avg_len is avg_len / n
+        print of f"Ep {ep + 1} | score {avg_score} | len {avg_len} | eps {epsilon} | buf {buf.size}"
+
+        # Save best
+        if avg_score > best_avg_score:
+            best_avg_score is avg_score
+            online.loaded is 1
+            save_policy of online
+            print of f"  -> new best avg score {best_avg_score}, saved"
+
+# Final save
+online.loaded is 1
+save_policy of online
+print of "---"
+print of f"Training complete. Best avg score: {best_avg_score}"
+print of f"Model saved to {POLICY_PATH}"
