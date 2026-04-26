@@ -210,8 +210,8 @@ define creature_turn_rate(spec, mass) as:
 
 # Collision power from spec + spikes_level + mass
 define creature_collision_power(spec, spikes_level, mass) as:
-    spike_bonus is floor of (count_spikes of spec / 6)
-    claw_bonus is floor of (count_appendage_type of [spec, APPENDAGE_CLAW] / 6)
+    spike_bonus is floor of ((count_spikes of spec) / 6)
+    claw_bonus is floor of ((count_appendage_type of [spec, APPENDAGE_CLAW]) / 6)
     jaw_bonus is 0
     if spec.mouth_type == MOUTH_JAW:
         jaw_bonus is 2

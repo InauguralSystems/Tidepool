@@ -48,6 +48,8 @@ prev_tier is 0
 toast_text is ""
 toast_timer is 0
 tutorial_shown is 0
+watch_mode is 0
+watch_diet is 0
 
 # High score
 high_score is 0
@@ -578,6 +580,8 @@ define start_game(diet_choice) as:
         game.creature.appendages[2] is APPENDAGE_CILIA
         game.creature.appendages[3] is APPENDAGE_CILIA
         game.alignment is -1
+    # Load saved creature if available
+    load_creature of game.creature
     prev_tier is game.scale_tier
     tutorial_shown is 0
     keys_held.thrust is 0
@@ -710,6 +714,18 @@ loop while running == 1:
                                 game_state is STATE_EDITOR
                         case "m":
                             game_action of [game, ACTION_CALL_MATE]
+                        case "tab":
+                            if watch_mode == 0:
+                                watch_mode is 1
+                                toast_text is "Watch mode: ON"
+                                toast_timer is 90
+                            else:
+                                watch_mode is 0
+                                game.thrusting is 0
+                                game.braking is 0
+                                game.turning is 0
+                                toast_text is "Watch mode: OFF"
+                                toast_timer is 90
                         case "escape":
                             game_state is STATE_PAUSED
                 elif game_state == STATE_PAUSED:
@@ -726,6 +742,17 @@ loop while running == 1:
                     if ev.key == "escape":
                         editor_close of null
                         game_state is STATE_PLAYING
+                    elif ev.key == "p":
+                        save_creature of game.creature
+                        toast_text is "Creature saved"
+                        toast_timer is 90
+                    elif ev.key == "o":
+                        if (load_creature of game.creature) == 1:
+                            toast_text is "Creature loaded"
+                            toast_timer is 90
+                        else:
+                            toast_text is "No saved creature"
+                            toast_timer is 90
                 elif game_state == STATE_DIET_CHOICE:
                     if ev.key == "escape":
                         running is 0
@@ -753,9 +780,11 @@ loop while running == 1:
                 my is ev.y
                 if game_state == STATE_DIET_CHOICE:
                     if (check_button_click of [diet_overlay, mx, my, "herb_btn"]) == 1:
+                        watch_diet is 0
                         game is start_game of 0
                         game_state is STATE_PLAYING
                     elif (check_button_click of [diet_overlay, mx, my, "carn_btn"]) == 1:
+                        watch_diet is 1
                         game is start_game of 1
                         game_state is STATE_PLAYING
                 elif game_state == STATE_PAUSED:
@@ -821,7 +850,10 @@ loop while running == 1:
     # ---- Update ----
     if game_state == STATE_PLAYING:
         if game != null:
-            apply_held_keys of [game, keys_held]
+            if watch_mode == 1:
+                autopilot_decide of game
+            else:
+                apply_held_keys of [game, keys_held]
             game_tick of game
             update_hud of game
 
@@ -836,9 +868,14 @@ loop while running == 1:
 
             # Check for game over transition
             if game.game_over == 1:
-                high_score is save_high_score of game.score
-                update_gameover_overlay of game
-                game_state is STATE_GAME_OVER
+                if watch_mode == 1:
+                    # Auto-restart in watch mode
+                    game is start_game of watch_diet
+                    game_state is STATE_PLAYING
+                else:
+                    high_score is save_high_score of game.score
+                    update_gameover_overlay of game
+                    game_state is STATE_GAME_OVER
 
             # Decrement toast timer
             if toast_timer > 0:
@@ -852,6 +889,10 @@ loop while running == 1:
 
     elif game_state == STATE_PLAYING:
         if game != null:
+            if watch_mode == 1:
+                gfx_title of "Tidepool [AI:auto]"
+            else:
+                gfx_title of "Tidepool"
             try:
                 render_world_only of [game, WINDOW_W, WINDOW_H]
                 ui.render of [hud_panel, 0, 0]

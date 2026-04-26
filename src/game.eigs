@@ -939,3 +939,270 @@ define game_status(game) as:
         "game_over": game.game_over,
         "message": game.message
     }
+
+# ============================================================
+# Autopilot — hand-coded AI decision logic
+# ============================================================
+
+define autopilot_buy_mutation(game) as:
+    if game.dna <= 0:
+        return 0
+    if game.sense_level < 1:
+        return ACTION_BUY_SENSE
+    if game.spikes_level < 2:
+        return ACTION_BUY_SPIKES
+    if game.sense_level < 3:
+        return ACTION_BUY_SENSE
+    if game.speed_level < 2:
+        return ACTION_BUY_SPEED
+    if game.spikes_level < 4:
+        return ACTION_BUY_SPIKES
+    if game.speed_level < 3:
+        return ACTION_BUY_SPEED
+    return ACTION_BUY_SENSE
+
+define autopilot_decide(game) as:
+    sense_range is creature_sense_range of [game.creature, game.sense_level]
+    my_power is creature_collision_power of [game.creature, game.spikes_level, game.mass]
+
+    # Buy mutations when we can
+    buy is autopilot_buy_mutation of game
+    if buy > 0:
+        game_action of [game, buy]
+
+    # Find nearest food
+    best_food_dist is 99999.0
+    best_food_x is 0.0
+    best_food_y is 0.0
+    have_food is 0
+    for i in range of (len of game.food):
+        if game.food[i].active == 1:
+            d is torus_dist of [game.px, game.py, game.food[i].px, game.food[i].py, game.world_w, game.world_h]
+            if d < sense_range:
+                if d < best_food_dist:
+                    best_food_dist is d
+                    best_food_x is game.food[i].px
+                    best_food_y is game.food[i].py
+                    have_food is 1
+
+    # Find nearest meat
+    best_meat_dist is 99999.0
+    best_meat_x is 0.0
+    best_meat_y is 0.0
+    have_meat is 0
+    for i in range of (len of game.meat):
+        if game.meat[i].active == 1:
+            d is torus_dist of [game.px, game.py, game.meat[i].px, game.meat[i].py, game.world_w, game.world_h]
+            if d < sense_range:
+                if d < best_meat_dist:
+                    best_meat_dist is d
+                    best_meat_x is game.meat[i].px
+                    best_meat_y is game.meat[i].py
+                    have_meat is 1
+
+    # Find nearest threat (predator stronger than us)
+    threat_dist is 99999.0
+    threat_x is 0.0
+    threat_y is 0.0
+    threat_size is 0.0
+    have_threat is 0
+    for i in range of (len of game.predators):
+        p is game.predators[i]
+        if p.active == 1:
+            if p.spec == null:
+                continue
+            d is torus_dist of [game.px, game.py, p.px, p.py, game.world_w, game.world_h]
+            if d < sense_range:
+                pred_power is creature_collision_power of [p.spec, 0, p.size]
+                if pred_power > my_power:
+                    if d < threat_dist:
+                        threat_dist is d
+                        threat_x is p.px
+                        threat_y is p.py
+                        threat_size is p.size
+                        have_threat is 1
+
+    # Find nearest huntable predator (weaker than us, for carnivores)
+    hunt_dist is 99999.0
+    hunt_x is 0.0
+    hunt_y is 0.0
+    have_hunt is 0
+    if have_food == 0:
+        if have_meat == 0:
+            for i in range of (len of game.predators):
+                p is game.predators[i]
+                if p.active == 1:
+                    if p.spec == null:
+                        continue
+                    d is torus_dist of [game.px, game.py, p.px, p.py, game.world_w, game.world_h]
+                    if d < sense_range:
+                        pred_power is creature_collision_power of [p.spec, 0, p.size]
+                        if my_power >= pred_power:
+                            if d < hunt_dist:
+                                hunt_dist is d
+                                hunt_x is p.px
+                                hunt_y is p.py
+                                have_hunt is 1
+
+    # Pick best food target (meat if closer than plant)
+    target_x is 0.0
+    target_y is 0.0
+    have_target is 0
+    if have_meat == 1:
+        if have_food == 0:
+            target_x is best_meat_x
+            target_y is best_meat_y
+            have_target is 1
+        elif best_meat_dist < best_food_dist:
+            target_x is best_meat_x
+            target_y is best_meat_y
+            have_target is 1
+        else:
+            target_x is best_food_x
+            target_y is best_food_y
+            have_target is 1
+    elif have_food == 1:
+        target_x is best_food_x
+        target_y is best_food_y
+        have_target is 1
+
+    # Decision: flee, seek food, hunt, or wander
+    if have_threat == 1:
+        if threat_dist < (6.0 + threat_size * 2.0):
+            dx is torus_delta of [game.px, threat_x, game.world_w]
+            dy is torus_delta of [game.py, threat_y, game.world_h]
+            flee_angle is atan2 of [0.0 - dy, 0.0 - dx]
+            diff is angle_diff of [game.angle, flee_angle]
+            game.thrusting is 1
+            game.braking is 0
+            if diff > 0.1:
+                game.turning is 1
+            elif diff < -0.1:
+                game.turning is -1
+            else:
+                game.turning is 0
+            return null
+
+    if have_target == 1:
+        dx is torus_delta of [game.px, target_x, game.world_w]
+        dy is torus_delta of [game.py, target_y, game.world_h]
+        target_angle is atan2 of [dy, dx]
+        diff is angle_diff of [game.angle, target_angle]
+        game.thrusting is 1
+        game.braking is 0
+        if diff > 0.1:
+            game.turning is 1
+        elif diff < -0.1:
+            game.turning is -1
+        else:
+            game.turning is 0
+        return null
+
+    if have_hunt == 1:
+        dx is torus_delta of [game.px, hunt_x, game.world_w]
+        dy is torus_delta of [game.py, hunt_y, game.world_h]
+        hunt_angle is atan2 of [dy, dx]
+        diff is angle_diff of [game.angle, hunt_angle]
+        game.thrusting is 1
+        game.braking is 0
+        if diff > 0.1:
+            game.turning is 1
+        elif diff < -0.1:
+            game.turning is -1
+        else:
+            game.turning is 0
+        return null
+
+    # Wander: thrust and occasionally turn
+    game.thrusting is 1
+    game.braking is 0
+    if game.tick % 120 == 0:
+        roll is random_int of [0, 2]
+        game.turning is roll - 1
+    return null
+
+# ============================================================
+# Creature save / load  (format compatible with C version)
+# ============================================================
+
+define _list_to_csv(lst) as:
+    out is ""
+    for i in range of (len of lst):
+        if i > 0:
+            out is f"{out},{lst[i]}"
+        else:
+            out is f"{lst[i]}"
+    return out
+
+define _csv_to_list(text, count) as:
+    parts is split of [text, ","]
+    result is []
+    for i in range of count:
+        if i < (len of parts):
+            append of [result, floor of (num of parts[i])]
+        else:
+            append of [result, 0]
+    return result
+
+define save_creature(spec) as:
+    mkdir of "saves"
+    lines is "version=9\n"
+    lines is f"{lines}palette={spec.palette}\n"
+    lines is f"{lines}body_shape={spec.body_shape}\n"
+    lines is f"{lines}body_segments={spec.body_segments}\n"
+    lines is f"{lines}pattern={spec.pattern}\n"
+    lines is f"{lines}mouth={spec.mouth_type}\n"
+    lines is f"{lines}eyes={_list_to_csv of spec.eyes}\n"
+    lines is f"{lines}eye_anchors={_list_to_csv of spec.eye_anchor}\n"
+    lines is f"{lines}spikes={_list_to_csv of spec.spikes}\n"
+    lines is f"{lines}spike_anchors={_list_to_csv of spec.spike_anchor}\n"
+    lines is f"{lines}appendages={_list_to_csv of spec.appendages}\n"
+    lines is f"{lines}appendage_anchors={_list_to_csv of spec.appendage_anchor}\n"
+    write_text of ["saves/creature_profile.txt", lines]
+    return 1
+
+define load_creature(spec) as:
+    if file_exists of "saves/creature_profile.txt" == 0:
+        return 0
+    text is read_text of "saves/creature_profile.txt"
+    if (len of text) == 0:
+        return 0
+    lines is split of [text, "\n"]
+    for i in range of (len of lines):
+        line is lines[i]
+        if (len of line) == 0:
+            continue
+        eq is -1
+        for j in range of (len of line):
+            if line[j] == "=":
+                eq is j
+                break
+        if eq < 0:
+            continue
+        key is substr of [line, 0, eq]
+        val is substr of [line, eq + 1, len of line]
+        match key:
+            case "palette":
+                spec.palette is floor of (num of val)
+            case "body_shape":
+                spec.body_shape is floor of (num of val)
+            case "body_segments":
+                segs is floor of (num of val)
+                spec.body_segments is clamp of [segs, 1, CREATURE_MAX_SEGMENTS]
+            case "pattern":
+                spec.pattern is floor of (num of val)
+            case "mouth":
+                spec.mouth_type is floor of (num of val)
+            case "eyes":
+                spec.eyes is _csv_to_list of [val, 14]
+            case "eye_anchors":
+                spec.eye_anchor is _csv_to_list of [val, 14]
+            case "spikes":
+                spec.spikes is _csv_to_list of [val, 14]
+            case "spike_anchors":
+                spec.spike_anchor is _csv_to_list of [val, 14]
+            case "appendages":
+                spec.appendages is _csv_to_list of [val, 14]
+            case "appendage_anchors":
+                spec.appendage_anchor is _csv_to_list of [val, 14]
+    return 1
