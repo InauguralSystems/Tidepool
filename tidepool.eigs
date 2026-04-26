@@ -922,7 +922,7 @@ loop while running == 1:
                             # Check part buttons
                             for pi in range of 8:
                                 if (check_button_click of [_editor_root, mx, my, f"ed_part_{pi}"]) == 1:
-                                    editor_handle_part_click of [pi, _editor_spec]
+                                    editor_handle_part_click of [pi, _editor_spec, game]
                             # Let UI dispatch handle dropdowns/spinboxes
                             ui.dispatch of [_editor_root, ev]
                 elif game_state == STATE_PLAYING:

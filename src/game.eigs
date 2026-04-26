@@ -51,6 +51,12 @@ define new_game(world_w, world_h, seed_val) as:
         "plants_eaten": 0,
         "meat_eaten": 0,
 
+        # Part unlock bitmasks
+        "unlocked_mouths": 7,
+        "unlocked_appendages": 1,
+        "unlocked_palettes": 1,
+        "unlocked_weapons": 0,
+
         # Scale tier
         "scale_tier": 0,
         "tier_transition_timer": 0,
@@ -923,6 +929,16 @@ define update_part_drops(game) as:
             game.event_collect_x is pd.px
             game.event_collect_y is pd.py
             game.event_part_collect is 1
+            # Unlock the collected part
+            if pd.part_type == PART_TYPE_MOUTH:
+                game.unlocked_mouths is bit_or of [game.unlocked_mouths, bit_shl of [1, pd.part_value]]
+            elif pd.part_type == PART_TYPE_APPENDAGE:
+                if pd.part_value >= 1 and pd.part_value <= 3:
+                    game.unlocked_appendages is bit_or of [game.unlocked_appendages, bit_shl of [1, pd.part_value - 1]]
+                elif pd.part_value >= 4 and pd.part_value <= 6:
+                    game.unlocked_weapons is bit_or of [game.unlocked_weapons, bit_shl of [1, pd.part_value - 4]]
+            elif pd.part_type == PART_TYPE_PALETTE:
+                game.unlocked_palettes is bit_or of [game.unlocked_palettes, bit_shl of [1, pd.part_value]]
             game.message is "Part collected! +5 DNA"
             continue
         append of [alive, pd]

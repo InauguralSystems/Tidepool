@@ -188,6 +188,21 @@ define editor_sync_widgets_from_spec(spec) as:
 # Apply widget values back to spec
 # ============================================================
 
+# Check if a part is unlocked via bitmask. Returns 1 if unlocked, 0 if locked.
+define part_unlocked(game, part_type, part_value) as:
+    if game == null:
+        return 1
+    if part_type == PART_TYPE_PALETTE:
+        return bit_and of [game.unlocked_palettes, bit_shl of [1, part_value]]
+    elif part_type == PART_TYPE_MOUTH:
+        return bit_and of [game.unlocked_mouths, bit_shl of [1, part_value]]
+    elif part_type == PART_TYPE_APPENDAGE:
+        if part_value >= 1 and part_value <= 3:
+            return bit_and of [game.unlocked_appendages, bit_shl of [1, part_value - 1]]
+        elif part_value >= 4 and part_value <= 6:
+            return bit_and of [game.unlocked_weapons, bit_shl of [1, part_value - 4]]
+    return 1
+
 define editor_apply_to_spec(spec) as:
     if _editor_root == null:
         return null
@@ -226,9 +241,15 @@ define editor_apply_to_spec(spec) as:
 # Handle part button clicks
 # ============================================================
 
-define editor_handle_part_click(part_index, spec) as:
+define editor_handle_part_click(part_index, spec, game) as:
     # Part buttons toggle appendages on socket pairs
     # part_index: 0=Eye, 1=Spike, 2=Fin, 3=Claw, 4=Cilia, 5=Poison, 6=Electric, 7=Jet
+    # Gate locked parts (appendage types map: 2=Fin(1), 3=Claw(2), ..., 7=Jet(6))
+    if part_index >= 2 and game != null:
+        app_type is part_index - 1
+        if (part_unlocked of [game, PART_TYPE_APPENDAGE, app_type]) == 0:
+            game.message is "Part not yet discovered..."
+            return null
     max_sockets is spec.body_segments * 2
     if max_sockets > CREATURE_MAX_SOCKETS:
         max_sockets is CREATURE_MAX_SOCKETS
