@@ -10,9 +10,103 @@
 #   1        — buy speed (5 DNA)
 #   2        — buy sense (5 DNA)
 #   3        — buy spikes (5 DNA)
+#   Tab      — toggle watch mode (AI plays)
 #   Escape   — pause (during play) / back
+#
+# Headless modes:
+#   eigenscript tidepool.eigs --demo 500 --seed 42
+#   eigenscript tidepool.eigs --demo 500 --seed 42 --batch 20
 
 load_file of "src/game.eigs"
+
+# ============================================================
+# CLI argument parsing
+# ============================================================
+
+define parse_args() as:
+    argv is args of null
+    result is {"demo": -1, "seed": -1, "batch": 1}
+    i is 0
+    loop while i < (len of argv):
+        match argv[i]:
+            case "--demo":
+                if i + 1 < (len of argv):
+                    i is i + 1
+                    result.demo is floor of (num of argv[i])
+            case "--seed":
+                if i + 1 < (len of argv):
+                    i is i + 1
+                    result.seed is floor of (num of argv[i])
+            case "--batch":
+                if i + 1 < (len of argv):
+                    i is i + 1
+                    result.batch is floor of (num of argv[i])
+        i is i + 1
+    return result
+
+cli is parse_args of null
+
+# ============================================================
+# Headless demo mode
+# ============================================================
+
+if cli.demo >= 0:
+    define run_demo_episode(ticks, seed_val) as:
+        game is new_game of [60.0, 30.0, seed_val]
+        for t in range of ticks:
+            autopilot_decide of game
+            game_tick of game
+            if game.game_over == 1:
+                break
+        return {
+            "score": game.score,
+            "energy": game.energy,
+            "food": game.food_eaten,
+            "tier": game.scale_tier,
+            "ticks": game.tick,
+            "alive": 1 - game.game_over
+        }
+
+    base_seed is cli.seed
+    if base_seed < 0:
+        base_seed is random_int of [1, 99999]
+
+    if cli.batch <= 1:
+        # Single demo run
+        r is run_demo_episode of [cli.demo, base_seed]
+        print of f"seed={base_seed} ticks={r.ticks} score={r.score} energy={r.energy} food={r.food} tier={r.tier} alive={r.alive}"
+    else:
+        # Batch run with aggregate stats
+        total_score is 0
+        total_food is 0
+        total_energy is 0
+        total_ticks is 0
+        survived is 0
+
+        for ep in range of cli.batch:
+            ep_seed is base_seed + ep
+            r is run_demo_episode of [cli.demo, ep_seed]
+            total_score is total_score + r.score
+            total_food is total_food + r.food
+            total_energy is total_energy + r.energy
+            total_ticks is total_ticks + r.ticks
+            survived is survived + r.alive
+
+        n is cli.batch
+        print of f"episodes={n} demo_ticks={cli.demo} seed={base_seed}"
+        print of f"  survived: {survived}/{n}"
+        print of f"  avg_score: {total_score / n}"
+        print of f"  avg_food: {total_food / n}"
+        print of f"  avg_energy: {total_energy / n}"
+        print of f"  avg_ticks: {total_ticks / n}"
+
+    # Exit without opening a window
+    return null
+
+# ============================================================
+# Graphical mode — load renderer, editor, UI
+# ============================================================
+
 load_file of "src/renderer.eigs"
 load_file of "src/editor.eigs"
 import ui
