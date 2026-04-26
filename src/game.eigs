@@ -374,6 +374,7 @@ define game_tick(game) as:
                 f.active is 1
 
     # Predator AI and physics
+    player_power is creature_collision_power of [game.creature, game.spikes_level, game.mass]
     for i in range of (len of game.predators):
         pred is game.predators[i]
         if pred.active == 1:
@@ -381,22 +382,138 @@ define game_tick(game) as:
             if pred.stunned_timer > 0:
                 pred.stunned_timer is pred.stunned_timer - 1
 
-            # Predator physics — unobserved for performance
+            # Diet-driven AI + boid flocking — unobserved for performance
             unobserved:
                 if pred.stunned_timer <= 0:
+                    sp is game.species[pred.species_id]
+                    sp_diet is sp.diet
+                    sp_aggro is sp.aggression
+                    flee_from_player is 0
+                    if player_power >= pred.size + 3:
+                        flee_from_player is 1
+
+                    # Size-dependent physics
+                    pred_thrust is max of [PREDATOR_BASE_THRUST - pred.size * 1.0, 3.0]
+                    pred_turn is max of [PREDATOR_BASE_TURN_RATE - pred.size * 0.3, 1.5]
+                    pred_max_spd is max of [5.0 - pred.size * 0.5, 2.0]
+                    chase_range is 5.0 + pred.size * 2.0
+                    flee_range is 10.0
+
+                    # Distance to player
+                    pdx is torus_delta of [pred.px, game.px, game.world_w]
+                    pdy is torus_delta of [pred.py, game.py, game.world_h]
+                    player_dist is sqrt of (pdx * pdx + pdy * pdy)
+
+                    # Wander timer: only re-evaluate targets periodically
                     pred.wander_timer is pred.wander_timer - 1
-                    if pred.wander_timer <= 0:
+                    needs_retarget is pred.wander_timer <= 0
+                    if needs_retarget == 1:
                         pred.target_angle is rand_range_f of [0 - PI, PI]
-                        pred.wander_timer is random_int of [60, 180]
+                        pred.wander_timer is random_int of [30, 90]
+
+                    # Reactive behaviors run every tick (cheap: single distance check)
+                    # Flee overrides target angle immediately
+                    if sp_diet == MOUTH_FILTER:
+                        if flee_from_player == 0 and player_dist < flee_range:
+                            pred.target_angle is atan2 of [0 - pdy, 0 - pdx]
+                    elif sp_diet == MOUTH_JAW or sp_diet == MOUTH_PROBOSCIS:
+                        if sp_aggro >= 2 and flee_from_player == 0 and player_dist < chase_range:
+                            pred.target_angle is atan2 of [pdy, pdx]
+                        elif flee_from_player == 1 and player_dist < flee_range:
+                            pred.target_angle is atan2 of [0 - pdy, 0 - pdx]
+
+                    # Expensive searches only on retarget (food seek, NPC hunt, flocking)
+                    if needs_retarget == 1:
+                        if sp_diet == MOUTH_FILTER or sp_diet == MOUTH_PROBOSCIS:
+                            # Seek nearest food
+                            best_food_dsq is 64.0
+                            best_food_angle is pred.target_angle
+                            for fi in range of (len of game.food):
+                                fd is game.food[fi]
+                                if fd.active == 1:
+                                    fdx is torus_delta of [pred.px, fd.px, game.world_w]
+                                    fdy is torus_delta of [pred.py, fd.py, game.world_h]
+                                    fd_dsq is fdx * fdx + fdy * fdy
+                                    if fd_dsq < best_food_dsq:
+                                        best_food_dsq is fd_dsq
+                                        best_food_angle is atan2 of [fdy, fdx]
+                            if best_food_dsq < 64.0:
+                                pred.target_angle is best_food_angle
+
+                        if sp_diet == MOUTH_JAW or sp_diet == MOUTH_PROBOSCIS:
+                            # Hunt smaller NPCs of different species
+                            best_prey_dsq is chase_range * chase_range
+                            best_prey_angle is pred.target_angle
+                            found_prey is 0
+                            for pi in range of (len of game.predators):
+                                if pi == i:
+                                    continue
+                                prey is game.predators[pi]
+                                if prey.active != 1 or prey.species_id == pred.species_id:
+                                    continue
+                                if prey.size >= pred.size:
+                                    continue
+                                prx is torus_delta of [pred.px, prey.px, game.world_w]
+                                pry is torus_delta of [pred.py, prey.py, game.world_h]
+                                pr_dsq is prx * prx + pry * pry
+                                if pr_dsq < best_prey_dsq:
+                                    best_prey_dsq is pr_dsq
+                                    best_prey_angle is atan2 of [pry, prx]
+                                    found_prey is 1
+                            if found_prey == 1:
+                                pred.target_angle is best_prey_angle
+
+                        # Boid flocking: align/cohere/separate with same-species
+                        align_x is 0.0
+                        align_y is 0.0
+                        cohere_x is 0.0
+                        cohere_y is 0.0
+                        sep_x is 0.0
+                        sep_y is 0.0
+                        flock_count is 0
+                        for j in range of (len of game.predators):
+                            if j == i:
+                                continue
+                            other is game.predators[j]
+                            if other.active != 1 or other.species_id != pred.species_id:
+                                continue
+                            odx is torus_delta of [pred.px, other.px, game.world_w]
+                            ody is torus_delta of [pred.py, other.py, game.world_h]
+                            od_sq is odx * odx + ody * ody
+                            if od_sq > 36.0:
+                                continue
+                            od is sqrt of od_sq
+                            flock_count is flock_count + 1
+                            align_x is align_x + cos of other.angle
+                            align_y is align_y + sin of other.angle
+                            cohere_x is cohere_x + odx
+                            cohere_y is cohere_y + ody
+                            if od < 1.5 and od > 0.01:
+                                sep_x is sep_x - odx / od
+                                sep_y is sep_y - ody / od
+
+                        if flock_count > 0:
+                            flock_dx is align_x * 0.3 + cohere_x * 0.2 + sep_x * 0.5
+                            flock_dy is align_y * 0.3 + cohere_y * 0.2 + sep_y * 0.5
+                            flock_mag is sqrt of (flock_dx * flock_dx + flock_dy * flock_dy)
+                            if flock_mag > 0.01:
+                                flock_angle is atan2 of [flock_dy, flock_dx]
+                                blend_dx is (cos of pred.target_angle) * 0.7 + (cos of flock_angle) * 0.3
+                                blend_dy is (sin of pred.target_angle) * 0.7 + (sin of flock_angle) * 0.3
+                                pred.target_angle is atan2 of [blend_dy, blend_dx]
 
                     # Steer toward target angle
                     diff is angle_diff of [pred.angle, pred.target_angle]
-                    steer is clamp of [diff, -PREDATOR_BASE_TURN_RATE * SIM_DT, PREDATOR_BASE_TURN_RATE * SIM_DT]
+                    steer is clamp of [diff, 0 - pred_turn * SIM_DT, pred_turn * SIM_DT]
                     pred.angle is normalize_angle of (pred.angle + steer)
 
-                    # Thrust
-                    pred.vx is pred.vx + (cos of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
-                    pred.vy is pred.vy + (sin of pred.angle) * PREDATOR_BASE_THRUST * SIM_DT
+                    # Thrust with speed cap
+                    pred.vx is pred.vx + (cos of pred.angle) * pred_thrust * SIM_DT
+                    pred.vy is pred.vy + (sin of pred.angle) * pred_thrust * SIM_DT
+                    spd is sqrt of (pred.vx * pred.vx + pred.vy * pred.vy)
+                    if spd > pred_max_spd:
+                        pred.vx is pred.vx * (pred_max_spd / spd)
+                        pred.vy is pred.vy * (pred_max_spd / spd)
 
                 # Drag (always applies)
                 pred.vx is pred.vx * (1.0 - PREDATOR_BASE_DRAG * SIM_DT)
@@ -406,11 +523,20 @@ define game_tick(game) as:
                 pred.px is wrap_coord of [pred.px + pred.vx * SIM_DT, game.world_w]
                 pred.py is wrap_coord of [pred.py + pred.vy * SIM_DT, game.world_h]
 
+            # Herbivore predators eat food on contact
+            if game.species[pred.species_id].diet == MOUTH_FILTER:
+                for fi in range of (len of game.food):
+                    fd is game.food[fi]
+                    if fd.active == 1:
+                        fd_sq is torus_dist_sq of [pred.px, pred.py, fd.px, fd.py, game.world_w, game.world_h]
+                        if fd_sq < (pred.radius + FOOD_RADIUS) * (pred.radius + FOOD_RADIUS):
+                            fd.px is rand_range_f of [0, game.world_w]
+                            fd.py is rand_range_f of [0, game.world_h]
+
             # Predator-player collision
             dist_sq is torus_dist_sq of [game.px, game.py, pred.px, pred.py, game.world_w, game.world_h]
             kill_range is (p_radius + pred.radius) * (p_radius + pred.radius)
             if dist_sq < kill_range:
-                player_power is creature_collision_power of [game.creature, game.spikes_level, game.mass]
                 pred_power is pred.size + 1
                 if player_power >= pred_power:
                     # Player overpowers — damage predator, knockback
