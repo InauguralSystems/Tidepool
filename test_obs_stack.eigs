@@ -1,0 +1,66 @@
+load_file of "src/game.eigs"
+load_file of "src/neural.eigs"
+
+print of "=== Observation stacking tests ==="
+
+# Test 1: New stack is empty
+stack is new_observation_stack of null
+assert of [stack.count == 0, "new stack count is 0"]
+print of "  new stack: ok"
+
+# Test 2: Push observations and check count
+game is new_game of [60, 40, 42]
+for i in range of 3:
+    game_tick of game
+    obs is build_observation of game
+    push_observation of [stack, obs]
+assert of [stack.count == 3, "count is 3 after 3 pushes"]
+assert of [(len of stack.frames) == 3, "3 frames stored"]
+print of "  push 3 frames: ok"
+
+# Test 3: Build stacked obs with fewer than 4 frames (right-aligned, left zero-padded)
+stacked is build_stacked_observation of [stack, game]
+expected_len is NEURAL_INPUT_SIZE
+assert of [(len of stacked) == expected_len, f"stacked length is {expected_len}"]
+# First frame slot (index 0) should be all zeros (right-aligned: 3 frames at slots 1,2,3)
+all_zero is 1
+for k in range of NEURAL_OBS_SIZE:
+    if stacked[k] != 0.0:
+        all_zero is 0
+assert of [all_zero == 1, "slot 0 is zero-padded"]
+print of "  right-aligned padding: ok"
+
+# Test 4: Push a 4th frame, verify full
+game_tick of game
+obs is build_observation of game
+push_observation of [stack, obs]
+assert of [stack.count == 4, "count is 4 after 4 pushes"]
+stacked is build_stacked_observation of [stack, game]
+assert of [(len of stacked) == expected_len, "stacked length still correct"]
+# No zero padding now — slot 0 should have data
+has_nonzero is 0
+for k in range of NEURAL_OBS_SIZE:
+    if stacked[k] != 0.0:
+        has_nonzero is 1
+assert of [has_nonzero == 1, "slot 0 has data when full"]
+print of "  full stack: ok"
+
+# Test 5: Push 5th frame, verify sliding window (count stays 4)
+game_tick of game
+obs is build_observation of game
+push_observation of [stack, obs]
+assert of [stack.count == 4, "count stays 4 after overflow"]
+assert of [(len of stack.frames) == 4, "frames list stays 4"]
+print of "  sliding window: ok"
+
+# Test 6: Aux features are populated
+stacked is build_stacked_observation of [stack, game]
+aux_base is NEURAL_OBS_SIZE * NEURAL_STACK_FRAMES
+# sin/cos of phase should be valid
+sin_val is stacked[aux_base]
+cos_val is stacked[aux_base + 1]
+mag is sin_val * sin_val + cos_val * cos_val
+assert of [mag > 0.99 and mag < 1.01, "sin^2 + cos^2 ~ 1"]
+print of "  aux features: ok"
+
+print of "\n=== All observation stacking tests passed ==="

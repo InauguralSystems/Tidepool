@@ -27,4 +27,5 @@ a real limitation hit during non-trivial game development.
 - Found during: NPC AI (Phase 2)
 - Severity: High
 - Workaround: Run expensive searches (food-seeking, NPC hunting, boid flocking) only on retarget ticks (~every 30-90 frames) instead of every tick. Use distance-squared comparisons to avoid `sqrt`. Still 4x slower than simple wander AI (50ms vs 12ms per tick with 8 predators + 52 food).
+- Note: Also blocks expanding observation from 20 to 107 features (9x9 spatial grid) which would add more entity iteration loops.
 - Proper fix: Bytecode compilation or JIT for hot loops. Each `torus_delta`/`torus_dist_sq` call inside a nested loop goes through full interpreter dispatch. With 8 predators × 52 food items, that's ~400 function calls per retarget tick. The `unobserved` block helps with observer overhead but not dispatch cost. A batch distance builtin (e.g., `nearest_in_range of [entities, x, y, range, world_w, world_h]`) returning index+distance would also help.

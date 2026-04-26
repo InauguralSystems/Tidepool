@@ -147,6 +147,7 @@ toast_timer is 0
 tutorial_shown is 0
 watch_mode is 0
 watch_diet is 0
+obs_stack is new_observation_stack of null
 neural is load_policy of null
 if neural != null:
     print of "Neural policy loaded"
@@ -817,6 +818,7 @@ loop while running == 1:
                         case "tab":
                             if watch_mode == 0:
                                 watch_mode is 1
+                                obs_stack is new_observation_stack of null
                                 if neural != null:
                                     toast_text is "Watch mode: ON [neural]"
                                 else:
@@ -956,7 +958,9 @@ loop while running == 1:
             if watch_mode == 1:
                 if neural != null:
                     obs is build_observation of game
-                    policy_decide of [neural, obs, game]
+                    push_observation of [obs_stack, obs]
+                    stacked is build_stacked_observation of [obs_stack, game]
+                    policy_decide of [neural, stacked, game]
                 else:
                     autopilot_decide of game
             else:
@@ -979,6 +983,7 @@ loop while running == 1:
                 if watch_mode == 1:
                     # Auto-restart in watch mode
                     game is start_game of watch_diet
+                    obs_stack is new_observation_stack of null
                     game_state is STATE_PLAYING
                 else:
                     high_score is save_high_score of game.score

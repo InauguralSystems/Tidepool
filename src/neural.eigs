@@ -2,12 +2,16 @@
 # Neural Policy — MLP inference and training for Tidepool
 # ============================================================
 # Architecture: obs(20) -> hidden1(64, ReLU) -> hidden2(32, ReLU) -> actions(5)
+# With 4-frame temporal stacking: input = 20*4 + 4 aux = 84
 # Actions: 0=nothing, 1=thrust, 2=turn_left, 3=turn_right, 4=brake
 
 # Requires: constants.eigs, math_utils.eigs, entities.eigs, game.eigs
 # (loaded by game.eigs — load game.eigs before this file)
 
 NEURAL_OBS_SIZE is 20
+NEURAL_STACK_FRAMES is 4
+NEURAL_AUX_FEATURES is 4
+NEURAL_INPUT_SIZE is (NEURAL_OBS_SIZE * NEURAL_STACK_FRAMES) + NEURAL_AUX_FEATURES
 NEURAL_HIDDEN1 is 64
 NEURAL_HIDDEN2 is 32
 NEURAL_ACTIONS is 5
@@ -43,7 +47,7 @@ define zeros_1d(n) as:
 
 define new_policy() as:
     return {
-        "w1": xavier_init of [NEURAL_OBS_SIZE, NEURAL_HIDDEN1],
+        "w1": xavier_init of [NEURAL_INPUT_SIZE, NEURAL_HIDDEN1],
         "b1": zeros_1d of NEURAL_HIDDEN1,
         "w2": xavier_init of [NEURAL_HIDDEN1, NEURAL_HIDDEN2],
         "b2": zeros_1d of NEURAL_HIDDEN2,
@@ -184,6 +188,57 @@ define build_observation(game) as:
     return obs
 
 # ============================================================
+# Observation stacking — 4-frame temporal context
+# ============================================================
+# Ported from sporelike-c graphical_main.c:168-464
+# Circular buffer of recent observation frames. Right-aligned so
+# early frames (fewer than 4) get zero-padded on the left.
+
+define new_observation_stack() as:
+    return {"frames": [], "count": 0}
+
+define push_observation(stack, obs) as:
+    if stack.count < NEURAL_STACK_FRAMES:
+        # Still filling: append
+        append of [stack.frames, obs]
+        stack.count is stack.count + 1
+    else:
+        # Full: shift left, replace last
+        for k in range of (NEURAL_STACK_FRAMES - 1):
+            stack.frames[k] is stack.frames[k + 1]
+        stack.frames[NEURAL_STACK_FRAMES - 1] is obs
+
+define build_stacked_observation(stack, game) as:
+    total is NEURAL_INPUT_SIZE
+    result is zeros_1d of total
+
+    # Right-align: if only 2 frames, place at slots [2,3] not [0,1]
+    present is stack.count
+    if present > NEURAL_STACK_FRAMES:
+        present is NEURAL_STACK_FRAMES
+    start_slot is NEURAL_STACK_FRAMES - present
+
+    for f in range of present:
+        dst_offset is (start_slot + f) * NEURAL_OBS_SIZE
+        frame is stack.frames[f]
+        for k in range of NEURAL_OBS_SIZE:
+            result[dst_offset + k] is frame[k]
+
+    # Auxiliary temporal features (4 features after the stacked frames)
+    aux_base is NEURAL_OBS_SIZE * NEURAL_STACK_FRAMES
+    phase is ((game.tick % 120) / 120.0) * 2.0 * PI
+    result[aux_base] is sin of phase
+    result[aux_base + 1] is cos of phase
+    result[aux_base + 2] is 0.0
+    if (game.tick % 120) == 0:
+        result[aux_base + 2] is 1.0
+    # Wander turn hint: deterministic from seed + tick
+    wander_raw is (game.tick * 2654435761) % 3
+    result[aux_base + 3] is wander_raw - 1.0
+
+    return result
+
+# ============================================================
 # Save / load weights as text (one float per line)
 # ============================================================
 
@@ -224,8 +279,8 @@ define save_policy(policy) as:
 define _unflatten_weights(flat) as:
     policy is new_policy of null
     idx is 0
-    # w1: NEURAL_OBS_SIZE x NEURAL_HIDDEN1
-    for r in range of NEURAL_OBS_SIZE:
+    # w1: NEURAL_INPUT_SIZE x NEURAL_HIDDEN1
+    for r in range of NEURAL_INPUT_SIZE:
         for c in range of NEURAL_HIDDEN1:
             policy.w1[r][c] is flat[idx]
             idx is idx + 1
@@ -265,7 +320,7 @@ define load_policy() as:
     for i in range of (len of lines):
         if (len of lines[i]) > 0:
             append of [flat, num of lines[i]]
-    expected is (NEURAL_OBS_SIZE * NEURAL_HIDDEN1) + NEURAL_HIDDEN1 + (NEURAL_HIDDEN1 * NEURAL_HIDDEN2) + NEURAL_HIDDEN2 + (NEURAL_HIDDEN2 * NEURAL_ACTIONS) + NEURAL_ACTIONS
+    expected is (NEURAL_INPUT_SIZE * NEURAL_HIDDEN1) + NEURAL_HIDDEN1 + (NEURAL_HIDDEN1 * NEURAL_HIDDEN2) + NEURAL_HIDDEN2 + (NEURAL_HIDDEN2 * NEURAL_ACTIONS) + NEURAL_ACTIONS
     if (len of flat) != expected:
         print of f"Policy file has {len of flat} weights, expected {expected}"
         return null
