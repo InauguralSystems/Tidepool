@@ -537,10 +537,17 @@ define game_tick(game) as:
             dist_sq is torus_dist_sq of [game.px, game.py, pred.px, pred.py, game.world_w, game.world_h]
             kill_range is (p_radius + pred.radius) * (p_radius + pred.radius)
             if dist_sq < kill_range:
-                pred_power is pred.size + 1
-                if player_power >= pred_power:
+                # Zone-aware combat: determine which zone of each combatant is engaged
+                cdx is torus_delta of [game.px, pred.px, game.world_w]
+                cdy is torus_delta of [game.py, pred.py, game.world_h]
+                player_zone is body_zone_from_delta of [game.angle, cdx, cdy]
+                pred_zone is body_zone_from_delta of [pred.angle, 0 - cdx, 0 - cdy]
+                zone_player_power is creature_collision_power_for_zone of [game.creature, game.spikes_level, game.mass, player_zone]
+                pred_power is predator_collision_power_for_zone of [pred, pred_zone]
+                if zone_player_power >= pred_power:
                     # Player overpowers — damage predator, knockback
-                    pred.hp is pred.hp - 1
+                    dmg is 1 + floor of ((zone_player_power - pred_power) / 2)
+                    pred.hp is pred.hp - dmg
                     # Knockback
                     bdx is torus_delta of [game.px, pred.px, game.world_w]
                     bdy is torus_delta of [game.py, pred.py, game.world_h]

@@ -77,6 +77,22 @@ define body_axes(angle) as:
         "lx": 0 - fy, "ly": fx
     }
 
+# Classify which body zone (FRONT/SIDE/REAR) a delta vector hits
+# given the entity's facing angle. Uses dot product projection.
+define body_zone_from_delta(angle, dx, dy) as:
+    fx is cos of angle
+    fy is sin of angle
+    lx is 0 - fy
+    ly is fx
+    fwd is dx * fx + dy * fy
+    lat is dx * lx + dy * ly
+    abs_lat is abs of lat
+    if fwd > abs_lat:
+        return BODY_ZONE_FRONT
+    if (0 - fwd) > abs_lat:
+        return BODY_ZONE_REAR
+    return BODY_ZONE_SIDE
+
 # Distance (not squared)
 define torus_dist(x1, y1, x2, y2, ww, wh) as:
     return sqrt of (torus_dist_sq of [x1, y1, x2, y2, ww, wh])

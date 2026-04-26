@@ -94,6 +94,11 @@ MOUTH_FILTER is 0
 MOUTH_JAW is 1
 MOUTH_PROBOSCIS is 2
 
+# Body zones (for directional combat)
+BODY_ZONE_FRONT is 0
+BODY_ZONE_SIDE is 1
+BODY_ZONE_REAR is 2
+
 # Game over reasons
 GAME_OVER_NONE is 0
 GAME_OVER_CONSUMED is 1

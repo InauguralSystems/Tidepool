@@ -219,6 +219,32 @@ define creature_collision_power(spec, spikes_level, mass) as:
         jaw_bonus is 1
     return mass + spikes_level * 2 + spike_bonus + claw_bonus + jaw_bonus
 
+# Zone-aware collision power: front gets jaw+spike bonus, rear is weaker
+define creature_collision_power_for_zone(spec, spikes_level, mass, zone) as:
+    base is creature_collision_power of [spec, spikes_level, mass]
+    if zone == BODY_ZONE_FRONT:
+        # Extra spike and claw bonus for front zone
+        front_spikes is floor of ((count_spikes of spec) / 4)
+        front_claws is floor of ((count_appendage_type of [spec, APPENDAGE_CLAW]) / 4)
+        jaw_bonus is 0
+        if spec.mouth_type == MOUTH_JAW:
+            jaw_bonus is 2
+        elif spec.mouth_type == MOUTH_PROBOSCIS:
+            jaw_bonus is 1
+        return base + front_spikes + front_claws + jaw_bonus
+    elif zone == BODY_ZONE_REAR:
+        return max of [base - 1, 1]
+    return base
+
+# Predator zone power: front is strongest, rear weakest
+define predator_collision_power_for_zone(pred, zone) as:
+    base is pred.size + 1
+    if zone == BODY_ZONE_FRONT:
+        return base + 1 + floor of (pred.size / 2)
+    elif zone == BODY_ZONE_REAR:
+        return max of [base - 1, 1]
+    return base + floor of (pred.size / 3)
+
 # Sense range from spec + sense_level
 define creature_sense_range(spec, sense_level) as:
     eye_count is count_eyes of spec
