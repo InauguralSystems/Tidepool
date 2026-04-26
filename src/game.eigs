@@ -431,20 +431,10 @@ define game_tick(game) as:
                     # Expensive searches only on retarget (food seek, NPC hunt, flocking)
                     if needs_retarget == 1:
                         if sp_diet == MOUTH_FILTER or sp_diet == MOUTH_PROBOSCIS:
-                            # Seek nearest food
-                            best_food_dsq is 64.0
-                            best_food_angle is pred.target_angle
-                            for fi in range of (len of game.food):
-                                fd is game.food[fi]
-                                if fd.active == 1:
-                                    fdx is torus_delta of [pred.px, fd.px, game.world_w]
-                                    fdy is torus_delta of [pred.py, fd.py, game.world_h]
-                                    fd_dsq is fdx * fdx + fdy * fdy
-                                    if fd_dsq < best_food_dsq:
-                                        best_food_dsq is fd_dsq
-                                        best_food_angle is atan2 of [fdy, fdx]
-                            if best_food_dsq < 64.0:
-                                pred.target_angle is best_food_angle
+                            # Seek nearest food (batch C builtin)
+                            nf is nearest_in_range of [game.food, pred.px, pred.py, 8.0, game.world_w, game.world_h]
+                            if nf != null:
+                                pred.target_angle is atan2 of [nf.dy, nf.dx]
 
                         if sp_diet == MOUTH_JAW or sp_diet == MOUTH_PROBOSCIS:
                             # Hunt smaller NPCs of different species

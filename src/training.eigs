@@ -2,14 +2,10 @@
 # Training — demo logging and background behavior cloning
 # ============================================================
 # Ported from sporelike-c graphical_main.c:1127-1190
-#
-# GAP-005: recv blocks — can't poll channels in game loop.
-# GAP-006: spawn takes no arguments — must capture via closures.
-# Workaround: training thread writes result to file, main thread
-# polls file existence with file_exists (non-blocking).
+# Uses try_recv (non-blocking) and spawn of [fn, arg] from
+# EigenScript language expansion.
 
 DEMO_LOG_PATH is "models/demo_log.txt"
-TRAINING_RESULT_PATH is "models/training_result.txt"
 DEMO_THRESHOLD is 512
 TRAINING_EPOCHS is 4
 
@@ -25,8 +21,43 @@ define log_demo_frame(log, obs, action) as:
     append of [log.actions, action]
     log.count is log.count + 1
 
-define save_demo_log(log) as:
+# ============================================================
+# Background training via spawn + channel
+# ============================================================
+
+_training_active is 0
+_training_thread is null
+_training_channel is null
+
+define training_is_active() as:
+    return _training_active
+
+# Training worker — receives demo data via spawn arg, sends result via channel
+define _train_worker(data) as:
+    demo_log is data.demo_log
+    result_ch is data.channel
+
+    count is demo_log.count
+    if count < 10:
+        send of [result_ch, {"status": "failed", "reason": "too few samples"}]
+        return null
+
+    # Save demos to file for persistence
     mkdir of "models"
+    save_demo_log of demo_log
+
+    # Load or create policy
+    policy is new_policy of null
+    if file_exists of POLICY_PATH:
+        loaded is load_policy of null
+        if loaded != null:
+            policy is loaded
+
+    # Smoke test of the training path — real DQN training is in train.eigs
+    send of [result_ch, {"status": "done", "count": count}]
+    return null
+
+define save_demo_log(log) as:
     lines is ""
     for i in range of log.count:
         obs is log.obs[i]
@@ -39,101 +70,32 @@ define save_demo_log(log) as:
         lines is f"{lines}{row}:{act}\n"
     write_text of [DEMO_LOG_PATH, lines]
 
-# ============================================================
-# Background training via spawn
-# ============================================================
-
-# Training state (module-level)
-_training_active is 0
-_training_thread is null
-
-define training_is_active() as:
-    return _training_active
-
 # Launch behavior cloning on a background thread.
-# GAP-006: spawn takes no args, so we save demos to file first
-# and have the training function read from file.
 define launch_training(demo_log, current_policy) as:
     if _training_active == 1:
         return null
 
-    # Save demos to file for the training thread to read
-    save_demo_log of demo_log
-
-    # Save current policy as resume point
     if current_policy != null and current_policy.loaded == 1:
         save_policy of current_policy
 
-    # Delete any previous result
-    if file_exists of TRAINING_RESULT_PATH:
-        write_text of [TRAINING_RESULT_PATH, ""]
-
-    # Define training closure that captures nothing (reads from files)
-    define _train_worker() as:
-        # Load demos from file
-        if file_exists of DEMO_LOG_PATH == 0:
-            write_text of [TRAINING_RESULT_PATH, "failed:no demos"]
-            return null
-        text is read_text of DEMO_LOG_PATH
-        lines is split of [text, "\n"]
-
-        # Parse into obs/action pairs
-        train_obs is []
-        train_acts is []
-        for i in range of (len of lines):
-            line is lines[i]
-            if (len of line) == 0:
-                continue
-            colon is -1
-            for j in range of (len of line):
-                if line[j] == ":":
-                    colon is j
-                    break
-            if colon < 0:
-                continue
-            obs_str is substr of [line, 0, colon]
-            act_str is substr of [line, colon + 1, len of line]
-            parts is split of [obs_str, ","]
-            obs is []
-            for j in range of (len of parts):
-                append of [obs, num of parts[j]]
-            append of [train_obs, obs]
-            append of [train_acts, floor of (num of act_str)]
-
-        count is len of train_obs
-        if count < 10:
-            write_text of [TRAINING_RESULT_PATH, "failed:too few samples"]
-            return null
-
-        # Simple behavior cloning: train policy to predict autopilot actions
-        policy is new_policy of null
-        if file_exists of POLICY_PATH:
-            loaded is load_policy of null
-            if loaded != null:
-                policy is loaded
-
-        # Mini training loop (simplified — no backprop, just forward eval)
-        # The real DQN training is in train.eigs; this is a smoke test
-        # of the threading/file-IO path
-        write_text of [TRAINING_RESULT_PATH, f"done:{count}"]
-        return null
-
-    _training_thread is spawn of _train_worker
+    _training_channel is channel of null
+    data is {"demo_log": demo_log, "channel": _training_channel}
+    _training_thread is spawn of [_train_worker, data]
     _training_active is 1
 
-# Check if training completed (non-blocking file poll)
-# GAP-005: recv blocks, so we poll a result file instead
+# Check if training completed (non-blocking via try_recv)
 define check_training_done() as:
     if _training_active != 1:
         return null
-    if file_exists of TRAINING_RESULT_PATH == 0:
+    if _training_channel == null:
         return null
-    text is read_text of TRAINING_RESULT_PATH
-    if (len of text) == 0:
+    result is try_recv of _training_channel
+    if result == null:
         return null
-    # Training wrote a result — join the thread
+    # Training sent a result — join the thread
     if _training_thread != null:
         thread_join of _training_thread
         _training_thread is null
     _training_active is 0
-    return text
+    _training_channel is null
+    return result.status

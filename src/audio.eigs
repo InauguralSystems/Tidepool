@@ -15,24 +15,11 @@ _sounds is {}
 _audio_ready is 0
 _ambient_samples is null
 
-# Generate a frequency sweep by chaining short tone segments.
-# This approximates C's generate_tone(freq_start, freq_end, duration, volume, waveform).
-# waveform: 0 = sine, 1 = sawtooth
+# Generate a frequency sweep with decay envelope.
+# Uses the audio_sweep builtin for continuous phase sweep.
 define generate_sweep(freq_start, freq_end, duration, volume, waveform) as:
-    steps is 8
-    step_dur is duration / steps
-    result is []
-    for i in range of steps:
-        t is i / steps
-        freq is freq_start + (freq_end - freq_start) * t
-        if waveform == 0:
-            seg is audio_sine of [freq, step_dur, volume]
-        else:
-            seg is audio_saw of [freq, step_dur, volume]
-        result is concat of [result, seg]
-    # Apply linear decay envelope (attack=0, decay=duration, sustain=0, release=0)
-    result is audio_envelope of [result, 0.001, duration * 0.9, 0.1, duration * 0.09]
-    return result
+    samples is audio_sweep of [freq_start, freq_end, duration, volume, waveform]
+    return audio_envelope of [samples, 0.001, duration * 0.9, 0.1, duration * 0.09]
 
 define audio_game_init() as:
     dev is audio_open of [AUDIO_RATE, AUDIO_CHANNELS]
