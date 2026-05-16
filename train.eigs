@@ -42,6 +42,22 @@ define parse_train_args() as:
             if i + 1 < (len of argv):
                 i is i + 1
                 result.lr is num of argv[i]
+        elif argv[i] == "--batch":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.batch_size is floor of (num of argv[i])
+        elif argv[i] == "--buffer":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.buffer_size is floor of (num of argv[i])
+        elif argv[i] == "--ticks" or argv[i] == "--steps":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.tick_limit is floor of (num of argv[i])
+        elif argv[i] == "--target-update":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.target_update is floor of (num of argv[i])
         i is i + 1
     return result
 
@@ -354,7 +370,10 @@ recent_lengths is []
 
 for ep in range of hp.episodes:
     game is new_game of [60.0, 30.0, random_int of [1, 99999]]
-    obs is build_observation of game
+    obs_stack is new_observation_stack of null
+    raw_obs is build_observation of game
+    push_observation of [obs_stack, raw_obs]
+    obs is build_stacked_observation of [obs_stack, game]
     ep_return is 0.0
     ep_length is 0
     prev_score is 0
@@ -391,7 +410,9 @@ for ep in range of hp.episodes:
         game_tick of game
 
         # Build next observation and reward
-        next_obs is build_observation of game
+        next_raw_obs is build_observation of game
+        push_observation of [obs_stack, next_raw_obs]
+        next_obs is build_stacked_observation of [obs_stack, game]
         reward is compute_reward of [game, prev_score, prev_energy]
         done is game.game_over
         prev_score is game.score
