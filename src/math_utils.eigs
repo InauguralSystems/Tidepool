@@ -48,10 +48,20 @@ define torus_delta(from_val, to_val, limit) as:
         raw is raw + limit
     return raw
 
-# Squared distance on a torus
+# Squared distance on a torus — torus_delta inlined for hot-loop perf
 define torus_dist_sq(x1, y1, x2, y2, ww, wh) as:
-    dx is torus_delta of [x1, x2, ww]
-    dy is torus_delta of [y1, y2, wh]
+    dx is x2 - x1
+    hw is ww * 0.5
+    if dx > hw:
+        dx is dx - ww
+    elif dx < (0 - hw):
+        dx is dx + ww
+    dy is y2 - y1
+    hh is wh * 0.5
+    if dy > hh:
+        dy is dy - wh
+    elif dy < (0 - hh):
+        dy is dy + wh
     return dx * dx + dy * dy
 
 # Normalize angle to [-PI, PI]

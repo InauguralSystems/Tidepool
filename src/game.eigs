@@ -359,14 +359,29 @@ define game_tick(game) as:
             game.message is "Starved to death"
             return game
 
-    # Food collision
+    # Food collision — torus_dist_sq inlined, hoisted world constants
     p_radius is player_radius of game
+    eat_range is (p_radius + FOOD_RADIUS) * (p_radius + FOOD_RADIUS)
+    gpx is game.px
+    gpy is game.py
+    ww is game.world_w
+    wh is game.world_h
+    hw is ww * 0.5
+    hh is wh * 0.5
     for i in range of (len of game.food):
         f is game.food[i]
         if f.active == 1:
-            dist_sq is torus_dist_sq of [game.px, game.py, f.px, f.py, game.world_w, game.world_h]
-            eat_range is (p_radius + FOOD_RADIUS) * (p_radius + FOOD_RADIUS)
-            if dist_sq < eat_range:
+            dx is f.px - gpx
+            if dx > hw:
+                dx is dx - ww
+            elif dx < (0 - hw):
+                dx is dx + ww
+            dy is f.py - gpy
+            if dy > hh:
+                dy is dy - wh
+            elif dy < (0 - hh):
+                dy is dy + wh
+            if dx * dx + dy * dy < eat_range:
                 f.active is 0
                 game.energy is game.energy + 10
                 game.score is game.score + 1
@@ -375,8 +390,8 @@ define game_tick(game) as:
                 game.dna is game.dna + 1
                 game.event_ate_plant is 1
                 # Respawn food elsewhere
-                f.px is rand_range_f of [0, game.world_w]
-                f.py is rand_range_f of [0, game.world_h]
+                f.px is rand_range_f of [0, ww]
+                f.py is rand_range_f of [0, wh]
                 f.active is 1
 
     # Predator AI and physics
@@ -405,9 +420,21 @@ define game_tick(game) as:
                     chase_range is 5.0 + pred.size * 2.0
                     flee_range is 10.0
 
-                    # Distance to player
-                    pdx is torus_delta of [pred.px, game.px, game.world_w]
-                    pdy is torus_delta of [pred.py, game.py, game.world_h]
+                    # Distance to player — torus_delta inlined
+                    pp_ww is game.world_w
+                    pp_wh is game.world_h
+                    pdx is game.px - pred.px
+                    pp_half is pp_ww * 0.5
+                    if pdx > pp_half:
+                        pdx is pdx - pp_ww
+                    elif pdx < (0 - pp_half):
+                        pdx is pdx + pp_ww
+                    pdy is game.py - pred.py
+                    pp_half is pp_wh * 0.5
+                    if pdy > pp_half:
+                        pdy is pdy - pp_wh
+                    elif pdy < (0 - pp_half):
+                        pdy is pdy + pp_wh
                     player_dist is sqrt of (pdx * pdx + pdy * pdy)
 
                     # Wander timer: only re-evaluate targets periodically
@@ -519,18 +546,49 @@ define game_tick(game) as:
                 pred.px is wrap_coord of [pred.px + pred.vx * SIM_DT, game.world_w]
                 pred.py is wrap_coord of [pred.py + pred.vy * SIM_DT, game.world_h]
 
-            # Herbivore predators eat food on contact
+            # Herbivore predators eat food on contact — torus_dist_sq inlined,
+            # hoisted world constants + pred position + eat range squared.
             if game.species[pred.species_id].diet == MOUTH_FILTER:
+                ppx is pred.px
+                ppy is pred.py
+                pww is game.world_w
+                pwh is game.world_h
+                phw is pww * 0.5
+                phh is pwh * 0.5
+                pred_eat_sq is (pred.radius + FOOD_RADIUS) * (pred.radius + FOOD_RADIUS)
                 for fi in range of (len of game.food):
                     fd is game.food[fi]
                     if fd.active == 1:
-                        fd_sq is torus_dist_sq of [pred.px, pred.py, fd.px, fd.py, game.world_w, game.world_h]
-                        if fd_sq < (pred.radius + FOOD_RADIUS) * (pred.radius + FOOD_RADIUS):
-                            fd.px is rand_range_f of [0, game.world_w]
-                            fd.py is rand_range_f of [0, game.world_h]
+                        dx is fd.px - ppx
+                        if dx > phw:
+                            dx is dx - pww
+                        elif dx < (0 - phw):
+                            dx is dx + pww
+                        dy is fd.py - ppy
+                        if dy > phh:
+                            dy is dy - pwh
+                        elif dy < (0 - phh):
+                            dy is dy + pwh
+                        if dx * dx + dy * dy < pred_eat_sq:
+                            fd.px is rand_range_f of [0, pww]
+                            fd.py is rand_range_f of [0, pwh]
 
-            # Predator-player collision
-            dist_sq is torus_dist_sq of [game.px, game.py, pred.px, pred.py, game.world_w, game.world_h]
+            # Predator-player collision — torus_dist_sq inlined
+            cpp_ww is game.world_w
+            cpp_wh is game.world_h
+            cpp_dx is pred.px - game.px
+            cpp_half is cpp_ww * 0.5
+            if cpp_dx > cpp_half:
+                cpp_dx is cpp_dx - cpp_ww
+            elif cpp_dx < (0 - cpp_half):
+                cpp_dx is cpp_dx + cpp_ww
+            cpp_dy is pred.py - game.py
+            cpp_half is cpp_wh * 0.5
+            if cpp_dy > cpp_half:
+                cpp_dy is cpp_dy - cpp_wh
+            elif cpp_dy < (0 - cpp_half):
+                cpp_dy is cpp_dy + cpp_wh
+            dist_sq is cpp_dx * cpp_dx + cpp_dy * cpp_dy
             kill_range is (p_radius + pred.radius) * (p_radius + pred.radius)
             if dist_sq < kill_range:
                 # Zone-aware combat: determine which zone of each combatant is engaged
@@ -586,8 +644,22 @@ define game_tick(game) as:
             if m.lifetime <= 0:
                 m.active is 0
             else:
-                # Meat-player collision
-                dist_sq is torus_dist_sq of [game.px, game.py, m.px, m.py, game.world_w, game.world_h]
+                # Meat-player collision — torus_dist_sq inlined
+                mp_ww is game.world_w
+                mp_wh is game.world_h
+                mp_dx is m.px - game.px
+                mp_half is mp_ww * 0.5
+                if mp_dx > mp_half:
+                    mp_dx is mp_dx - mp_ww
+                elif mp_dx < (0 - mp_half):
+                    mp_dx is mp_dx + mp_ww
+                mp_dy is m.py - game.py
+                mp_half is mp_wh * 0.5
+                if mp_dy > mp_half:
+                    mp_dy is mp_dy - mp_wh
+                elif mp_dy < (0 - mp_half):
+                    mp_dy is mp_dy + mp_wh
+                dist_sq is mp_dx * mp_dx + mp_dy * mp_dy
                 eat_range is (p_radius + 0.4) * (p_radius + 0.4)
                 if dist_sq < eat_range:
                     m.active is 0
