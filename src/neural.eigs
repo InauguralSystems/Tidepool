@@ -123,41 +123,78 @@ define build_observation(game) as:
         obs[7] is (angle_diff of [game.angle, move_angle]) / 3.14159
     obs[8] is game.angle / 3.14159
 
-    # Nearest food (9-11)
-    best_food_dist is 99999.0
-    best_food_angle is 0.0
+    # Hoisted world + player constants for the nearest-neighbor loops
+    gpx is game.px
+    gpy is game.py
+    ww is game.world_w
+    wh is game.world_h
+    hw is ww * 0.5
+    hh is wh * 0.5
+
+    # Nearest food (9-11) — compare on dist_sq, sqrt only the winner, inlined torus delta
+    best_food_dsq is 99999.0
+    best_food_dx is 0.0
+    best_food_dy is 0.0
+    found_food is 0
     for i in range of (len of game.food):
-        if game.food[i].active == 1:
-            d is torus_dist of [game.px, game.py, game.food[i].px, game.food[i].py, game.world_w, game.world_h]
-            if d < best_food_dist:
-                best_food_dist is d
-                dx is torus_delta of [game.px, game.food[i].px, game.world_w]
-                dy is torus_delta of [game.py, game.food[i].py, game.world_h]
-                best_food_angle is angle_diff of [game.angle, atan2 of [dy, dx]]
-    if best_food_dist < 99999.0:
+        f is game.food[i]
+        if f.active == 1:
+            dx is f.px - gpx
+            if dx > hw:
+                dx is dx - ww
+            elif dx < (0 - hw):
+                dx is dx + ww
+            dy is f.py - gpy
+            if dy > hh:
+                dy is dy - wh
+            elif dy < (0 - hh):
+                dy is dy + wh
+            dsq is dx * dx + dy * dy
+            if dsq < best_food_dsq:
+                best_food_dsq is dsq
+                best_food_dx is dx
+                best_food_dy is dy
+                found_food is 1
+    if found_food == 1:
+        best_food_dist is sqrt of best_food_dsq
+        best_food_angle is angle_diff of [game.angle, atan2 of [best_food_dy, best_food_dx]]
         obs[9] is 1.0
         if sense_range > 0:
             obs[10] is best_food_dist / sense_range
         obs[11] is best_food_angle / 3.14159
 
-    # Nearest threat (12-15)
-    best_threat_dist is 99999.0
-    best_threat_angle is 0.0
+    # Nearest threat (12-15) — compare on dist_sq, sqrt only the winner
+    best_threat_dsq is 99999.0
+    best_threat_dx is 0.0
+    best_threat_dy is 0.0
     best_threat_power is 0.0
+    found_threat is 0
     for i in range of (len of game.predators):
         p is game.predators[i]
         if p.active == 1:
             if p.spec != null:
-                d is torus_dist of [game.px, game.py, p.px, p.py, game.world_w, game.world_h]
                 pp is creature_collision_power of [p.spec, 0, p.size]
                 if pp > my_power:
-                    if d < best_threat_dist:
-                        best_threat_dist is d
-                        dx is torus_delta of [game.px, p.px, game.world_w]
-                        dy is torus_delta of [game.py, p.py, game.world_h]
-                        best_threat_angle is angle_diff of [game.angle, atan2 of [dy, dx]]
+                    dx is p.px - gpx
+                    if dx > hw:
+                        dx is dx - ww
+                    elif dx < (0 - hw):
+                        dx is dx + ww
+                    dy is p.py - gpy
+                    if dy > hh:
+                        dy is dy - wh
+                    elif dy < (0 - hh):
+                        dy is dy + wh
+                    dsq is dx * dx + dy * dy
+                    if dsq < best_threat_dsq:
+                        best_threat_dsq is dsq
+                        best_threat_dx is dx
+                        best_threat_dy is dy
                         best_threat_power is pp
-    if best_threat_dist < 99999.0:
+                        found_threat is 1
+    if found_threat == 1:
+        best_threat_dist is sqrt of best_threat_dsq
+        best_threat_angle is angle_diff of [game.angle, atan2 of [best_threat_dy, best_threat_dx]]
         obs[12] is 1.0
         if sense_range > 0:
             obs[13] is best_threat_dist / sense_range
@@ -165,18 +202,33 @@ define build_observation(game) as:
         if my_power > 0:
             obs[15] is best_threat_power / (my_power + best_threat_power)
 
-    # Nearest meat (16-18)
-    best_meat_dist is 99999.0
-    best_meat_angle is 0.0
+    # Nearest meat (16-18) — compare on dist_sq, sqrt only the winner
+    best_meat_dsq is 99999.0
+    best_meat_dx is 0.0
+    best_meat_dy is 0.0
+    found_meat is 0
     for i in range of (len of game.meat):
-        if game.meat[i].active == 1:
-            d is torus_dist of [game.px, game.py, game.meat[i].px, game.meat[i].py, game.world_w, game.world_h]
-            if d < best_meat_dist:
-                best_meat_dist is d
-                dx is torus_delta of [game.px, game.meat[i].px, game.world_w]
-                dy is torus_delta of [game.py, game.meat[i].py, game.world_h]
-                best_meat_angle is angle_diff of [game.angle, atan2 of [dy, dx]]
-    if best_meat_dist < 99999.0:
+        m is game.meat[i]
+        if m.active == 1:
+            dx is m.px - gpx
+            if dx > hw:
+                dx is dx - ww
+            elif dx < (0 - hw):
+                dx is dx + ww
+            dy is m.py - gpy
+            if dy > hh:
+                dy is dy - wh
+            elif dy < (0 - hh):
+                dy is dy + wh
+            dsq is dx * dx + dy * dy
+            if dsq < best_meat_dsq:
+                best_meat_dsq is dsq
+                best_meat_dx is dx
+                best_meat_dy is dy
+                found_meat is 1
+    if found_meat == 1:
+        best_meat_dist is sqrt of best_meat_dsq
+        best_meat_angle is angle_diff of [game.angle, atan2 of [best_meat_dy, best_meat_dx]]
         obs[16] is 1.0
         if sense_range > 0:
             obs[17] is best_meat_dist / sense_range
