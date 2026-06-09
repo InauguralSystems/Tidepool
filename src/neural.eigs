@@ -1,14 +1,21 @@
 # ============================================================
 # Neural Policy — MLP inference and training for Tidepool
 # ============================================================
-# Architecture: obs(20) -> hidden1(64, ReLU) -> hidden2(32, ReLU) -> actions(5)
-# With 4-frame temporal stacking: input = 20*4 + 4 aux = 84
+# Architecture: obs(107) -> hidden1(64, ReLU) -> hidden2(32, ReLU) -> actions(5)
+# obs layout:
+#   0-19   : base features (player state, velocity, nearest food/threat/meat, scale)
+#   20-100 : egocentric 9×9 spatial grid (food=+1, meat=+1.5, threat=-2; cells sum signed)
+#   101-106: global summary (counts + max threat ratio + player-cell food/threat)
+# With 4-frame temporal stacking: input = 107*4 + 4 aux = 432
 # Actions: 0=nothing, 1=thrust, 2=turn_left, 3=turn_right, 4=brake
 
 # Requires: constants.eigs, math_utils.eigs, entities.eigs, game.eigs
 # (loaded by game.eigs — load game.eigs before this file)
 
-NEURAL_OBS_SIZE is 20
+NEURAL_OBS_SIZE is 107
+NEURAL_GRID_SIDE is 9
+NEURAL_GRID_OFFSET is 20
+NEURAL_AUX_OFFSET is 101
 NEURAL_STACK_FRAMES is 4
 NEURAL_AUX_FEATURES is 4
 NEURAL_INPUT_SIZE is (NEURAL_OBS_SIZE * NEURAL_STACK_FRAMES) + NEURAL_AUX_FEATURES
@@ -123,7 +130,7 @@ define build_observation(game) as:
         obs[7] is (angle_diff of [game.angle, move_angle]) / 3.14159
     obs[8] is game.angle / 3.14159
 
-    # Hoisted world + player constants for the nearest-neighbor loops
+    # Hoisted world + player constants for the nearest-neighbor + grid loops
     gpx is game.px
     gpy is game.py
     ww is game.world_w
@@ -131,11 +138,23 @@ define build_observation(game) as:
     hw is ww * 0.5
     hh is wh * 0.5
 
-    # Nearest food (9-11) — compare on dist_sq, sqrt only the winner, inlined torus delta
+    # Egocentric grid setup. Minimum extent of 5.0 ensures the grid is informative
+    # even before sense_level is upgraded; sense upgrades just widen the view.
+    grid_extent is sense_range
+    if grid_extent < 5.0:
+        grid_extent is 5.0
+    grid_active is 1
+    cell_inv is 9.0 / (2.0 * grid_extent)
+    cos_a is cos of game.angle
+    sin_a is sin of game.angle
+
+    # Food: nearest (9-11) + grid + summary, all in one pass
     best_food_dsq is 99999.0
     best_food_dx is 0.0
     best_food_dy is 0.0
     found_food is 0
+    grid_food_total is 0
+    player_cell_food is 0
     for i in range of (len of game.food):
         f is game.food[i]
         if f.active == 1:
@@ -155,6 +174,25 @@ define build_observation(game) as:
                 best_food_dx is dx
                 best_food_dy is dy
                 found_food is 1
+            if grid_active == 1:
+                if dx >= (0 - grid_extent) and dx <= grid_extent and dy >= (0 - grid_extent) and dy <= grid_extent:
+                    ex is dx * cos_a + dy * sin_a
+                    ey is (0 - dx) * sin_a + dy * cos_a
+                    cx is floor of ((ex + grid_extent) * cell_inv)
+                    if cx < 0:
+                        cx is 0
+                    elif cx > 8:
+                        cx is 8
+                    cy is floor of ((ey + grid_extent) * cell_inv)
+                    if cy < 0:
+                        cy is 0
+                    elif cy > 8:
+                        cy is 8
+                    cell_idx is 20 + cy * 9 + cx
+                    obs[cell_idx] is obs[cell_idx] + 1.0
+                    grid_food_total is grid_food_total + 1
+                    if cx == 4 and cy == 4:
+                        player_cell_food is player_cell_food + 1
     if found_food == 1:
         best_food_dist is sqrt of best_food_dsq
         best_food_angle is angle_diff of [game.angle, atan2 of [best_food_dy, best_food_dx]]
@@ -163,35 +201,58 @@ define build_observation(game) as:
             obs[10] is best_food_dist / sense_range
         obs[11] is best_food_angle / 3.14159
 
-    # Nearest threat (12-15) — compare on dist_sq, sqrt only the winner
+    # Predators: nearest threat (12-15, power-filtered) + grid (all active) + summary
     best_threat_dsq is 99999.0
     best_threat_dx is 0.0
     best_threat_dy is 0.0
     best_threat_power is 0.0
     found_threat is 0
+    grid_threat_total is 0
+    player_cell_threat is 0
+    grid_max_threat_pp is 0.0
     for i in range of (len of game.predators):
         p is game.predators[i]
-        if p.active == 1:
-            if p.spec != null:
-                pp is creature_collision_power of [p.spec, 0, p.size]
-                if pp > my_power:
-                    dx is p.px - gpx
-                    if dx > hw:
-                        dx is dx - ww
-                    elif dx < (0 - hw):
-                        dx is dx + ww
-                    dy is p.py - gpy
-                    if dy > hh:
-                        dy is dy - wh
-                    elif dy < (0 - hh):
-                        dy is dy + wh
-                    dsq is dx * dx + dy * dy
-                    if dsq < best_threat_dsq:
-                        best_threat_dsq is dsq
-                        best_threat_dx is dx
-                        best_threat_dy is dy
-                        best_threat_power is pp
-                        found_threat is 1
+        if p.active == 1 and p.spec != null:
+            dx is p.px - gpx
+            if dx > hw:
+                dx is dx - ww
+            elif dx < (0 - hw):
+                dx is dx + ww
+            dy is p.py - gpy
+            if dy > hh:
+                dy is dy - wh
+            elif dy < (0 - hh):
+                dy is dy + wh
+            pp is creature_collision_power of [p.spec, 0, p.size]
+            if pp > my_power:
+                dsq is dx * dx + dy * dy
+                if dsq < best_threat_dsq:
+                    best_threat_dsq is dsq
+                    best_threat_dx is dx
+                    best_threat_dy is dy
+                    best_threat_power is pp
+                    found_threat is 1
+            if grid_active == 1:
+                if dx >= (0 - grid_extent) and dx <= grid_extent and dy >= (0 - grid_extent) and dy <= grid_extent:
+                    ex is dx * cos_a + dy * sin_a
+                    ey is (0 - dx) * sin_a + dy * cos_a
+                    cx is floor of ((ex + grid_extent) * cell_inv)
+                    if cx < 0:
+                        cx is 0
+                    elif cx > 8:
+                        cx is 8
+                    cy is floor of ((ey + grid_extent) * cell_inv)
+                    if cy < 0:
+                        cy is 0
+                    elif cy > 8:
+                        cy is 8
+                    cell_idx is 20 + cy * 9 + cx
+                    obs[cell_idx] is obs[cell_idx] - 2.0
+                    grid_threat_total is grid_threat_total + 1
+                    if pp > grid_max_threat_pp:
+                        grid_max_threat_pp is pp
+                    if cx == 4 and cy == 4:
+                        player_cell_threat is player_cell_threat + 1
     if found_threat == 1:
         best_threat_dist is sqrt of best_threat_dsq
         best_threat_angle is angle_diff of [game.angle, atan2 of [best_threat_dy, best_threat_dx]]
@@ -202,11 +263,12 @@ define build_observation(game) as:
         if my_power > 0:
             obs[15] is best_threat_power / (my_power + best_threat_power)
 
-    # Nearest meat (16-18) — compare on dist_sq, sqrt only the winner
+    # Meat: nearest (16-18) + grid + summary, all in one pass
     best_meat_dsq is 99999.0
     best_meat_dx is 0.0
     best_meat_dy is 0.0
     found_meat is 0
+    grid_meat_total is 0
     for i in range of (len of game.meat):
         m is game.meat[i]
         if m.active == 1:
@@ -226,6 +288,23 @@ define build_observation(game) as:
                 best_meat_dx is dx
                 best_meat_dy is dy
                 found_meat is 1
+            if grid_active == 1:
+                if dx >= (0 - grid_extent) and dx <= grid_extent and dy >= (0 - grid_extent) and dy <= grid_extent:
+                    ex is dx * cos_a + dy * sin_a
+                    ey is (0 - dx) * sin_a + dy * cos_a
+                    cx is floor of ((ex + grid_extent) * cell_inv)
+                    if cx < 0:
+                        cx is 0
+                    elif cx > 8:
+                        cx is 8
+                    cy is floor of ((ey + grid_extent) * cell_inv)
+                    if cy < 0:
+                        cy is 0
+                    elif cy > 8:
+                        cy is 8
+                    cell_idx is 20 + cy * 9 + cx
+                    obs[cell_idx] is obs[cell_idx] + 1.5
+                    grid_meat_total is grid_meat_total + 1
     if found_meat == 1:
         best_meat_dist is sqrt of best_meat_dsq
         best_meat_angle is angle_diff of [game.angle, atan2 of [best_meat_dy, best_meat_dx]]
@@ -236,6 +315,15 @@ define build_observation(game) as:
 
     # Scale tier (19)
     obs[19] is game.scale_tier / 4.0
+
+    # Global summary features (101-106)
+    obs[101] is grid_food_total / 16.0
+    obs[102] is grid_threat_total / 8.0
+    obs[103] is grid_meat_total / 8.0
+    if my_power > 0:
+        obs[104] is grid_max_threat_pp / my_power
+    obs[105] is player_cell_food / 4.0
+    obs[106] is player_cell_threat / 4.0
 
     return obs
 

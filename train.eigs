@@ -252,8 +252,9 @@ define train_step(online, target, buf, hp) as:
     # SGD update with gradient clipping
     lr is hp.lr
 
-    # Update w1
-    for r in range of NEURAL_OBS_SIZE:
+    # Update w1 — iterate full NEURAL_INPUT_SIZE rows (w1 has stacked-frame + aux rows,
+    # not just one obs-frame's worth)
+    for r in range of NEURAL_INPUT_SIZE:
         for c in range of NEURAL_HIDDEN1:
             g is dw1[r][c]
             if g > 1.0:
