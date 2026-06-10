@@ -1,0 +1,27 @@
+load_file of "src/game.eigs"
+
+game is new_game of [60.0, 20.0, 42]
+
+# warm-up
+for i in range of 50:
+    game is game_tick of game
+
+# Time 100 ticks n=5
+runs is 5
+r is 0
+total_ns is 0
+best_ns is 99999999999
+loop while r < runs:
+    t0 is monotonic_ns of null
+    for i in range of 100:
+        game is game_tick of game
+    t1 is monotonic_ns of null
+    dt is t1 - t0
+    total_ns is total_ns + dt
+    if dt < best_ns:
+        best_ns is dt
+    r is r + 1
+    print of f"run {r}: {(dt / 1000000)} ms"
+
+print of f"mean: {((total_ns / runs) / 1000000)} ms (n={runs})"
+print of f"best: {(best_ns / 1000000)} ms"
