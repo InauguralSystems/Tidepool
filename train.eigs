@@ -523,9 +523,16 @@ for ep in range of hp.episodes:
             save_policy of online
             print of f"  -> new best avg score {best_avg_score}, saved"
 
-# Final save
-online.loaded is 1
-save_policy of online
+# Keep the BEST checkpoint as the saved policy. The previous unconditional
+# final save overwrote it with the last-episode policy, which DQN often
+# degrades late in training (catastrophic forgetting) — so the saved model
+# could be far worse than the best one the run actually found. Only fall back
+# to saving the final policy if no checkpoint was ever saved (very short runs
+# that never hit a 50-episode print).
+if best_avg_score <= -9999.0:
+    online.loaded is 1
+    save_policy of online
+    print of "(no checkpoint beat the initial bar; saved final policy)"
 print of "---"
 print of f"Training complete. Best avg score: {best_avg_score}"
-print of f"Model saved to {POLICY_PATH}"
+print of f"Best policy saved to {POLICY_PATH}"
