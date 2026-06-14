@@ -371,25 +371,30 @@ define nearest_food_dist(game) as:
 
 define compute_reward(game, prev_score, prev_energy, prev_food_dist, cur_food_dist) as:
     r is 0.0
-    # Food eaten since last tick (sparse, high-value)
-    if game.score > prev_score:
-        r is r + 10.0
-    # Energy change (small penalty for losing energy)
-    if game.energy < prev_energy:
-        r is r - 0.1
-    # Death penalty
+    # UPS scale with what actually happened. Score jumps by +1 for food, +5
+    # for meat, +10 and up for a kill — so a kill is a genuine peak, not the
+    # same flat blip as nibbling a plant.
+    score_delta is game.score - prev_score
+    if score_delta > 0:
+        r is r + score_delta * 2.0
+    # DOWNS scale with damage taken. A predator bite (tens of energy) is a real
+    # valley; a single tick of starvation is barely a dip. The old flat -0.1
+    # made them identical, so the net never learned to fear getting hit.
+    energy_delta is prev_energy - game.energy
+    if energy_delta > 0:
+        r is r - energy_delta * 0.5
+    # Death is the deepest valley.
     if game.game_over == 1:
-        r is r - 20.0
-    # Small survival bonus
-    r is r + 0.01
-    # Dense shaping: reward closing distance to the nearest food. Clamped so
-    # torus wrap-around jumps (which flip sign of the delta) can't be farmed.
+        r is r - 50.0
+    # Light survival drip + light shaping toward food, kept small on purpose so
+    # the big damage/eat/kill/death events dominate the gradient.
+    r is r + 0.02
     delta is prev_food_dist - cur_food_dist
     if delta > 0.5:
         delta is 0.5
     elif delta < -0.5:
         delta is -0.5
-    r is r + 0.5 * delta
+    r is r + 0.3 * delta
     return r
 
 # ============================================================
