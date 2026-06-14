@@ -76,6 +76,9 @@ define new_game(world_w, world_h, seed_val) as:
         "electric_cooldown": 0,
         "jet_cooldown": 0,
         "jet_active": 0,
+        # Brief invulnerability after taking a bite (i-frames) so a losing
+        # collision costs energy + knockback instead of being an instant kill.
+        "invuln_timer": 0,
 
         # Creature
         "creature": new_creature_spec of null,
@@ -91,6 +94,7 @@ define new_game(world_w, world_h, seed_val) as:
         "event_mate_call": 0, "event_part_collect": 0,
         "event_tier_up": 0, "event_poison": 0,
         "event_electric": 0, "event_jet": 0,
+        "event_player_hurt": 0,
 
         # Entity lists
         "food": [],
@@ -391,6 +395,7 @@ define game_tick(game) as:
                 game.food_eaten is game.food_eaten + 1
                 game.plants_eaten is game.plants_eaten + 1
                 game.dna is game.dna + 1
+                game.mass is clamp of [game.mass + MASS_GAIN_FOOD, 1.0, MASS_MAX]
                 game.event_ate_plant is 1
                 # Respawn food elsewhere
                 f.px is rand_range_f of [0, ww]
@@ -608,6 +613,7 @@ define game_tick(game) as:
                         pred.active is 0
                         game.score is game.score + 10 + pred.size * 3
                         game.dna is game.dna + 3
+                        game.mass is clamp of [game.mass + MASS_GAIN_KILL, 1.0, MASS_MAX]
                         game.event_kill_x is pred.px
                         game.event_kill_y is pred.py
                         game.event_kill_palette is pred.spec.palette
@@ -617,12 +623,38 @@ define game_tick(game) as:
                         # Part drop chance
                         try_drop_part of [game, pred]
                 else:
-                    # Player dies
-                    game.game_over is 1
-                    game.event_died is 1
-                    game.game_over_reason is GAME_OVER_CONSUMED
-                    game.message is "Consumed by predator"
-                    return game
+                    # Player is out-powered in the engaged zone. Take a bite
+                    # (energy damage scaled by the power gap) plus knockback,
+                    # not an instant kill. Recent-hit invulnerability prevents
+                    # a predator from chewing through all your energy in a few
+                    # adjacent ticks. Death only when energy runs out.
+                    if game.invuln_timer <= 0:
+                        gap is pred_power - zone_player_power
+                        bite is 20 + gap * 8
+                        if bite > 60:
+                            bite is 60
+                        game.energy is game.energy - bite
+                        game.invuln_timer is 45
+                        game.event_player_hurt is 1
+                        game.event_collision_x is pred.px
+                        game.event_collision_y is pred.py
+                        # Knock the player away from the predator (and nudge the
+                        # predator forward), mirroring the overpower branch.
+                        bdx is torus_delta of [gpx, pred.px, ww]
+                        bdy is torus_delta of [gpy, pred.py, wh]
+                        bd is sqrt of (bdx * bdx + bdy * bdy)
+                        if bd > 0.01:
+                            game.vx is game.vx - (bdx / bd) * 3.0
+                            game.vy is game.vy - (bdy / bd) * 3.0
+                            pred.vx is pred.vx + (bdx / bd) * 1.0
+                            pred.vy is pred.vy + (bdy / bd) * 1.0
+                        if game.energy <= 0:
+                            game.energy is 0
+                            game.game_over is 1
+                            game.event_died is 1
+                            game.game_over_reason is GAME_OVER_CONSUMED
+                            game.message is "Consumed by predator"
+                            return game
 
     # NPC-vs-NPC combat
     npc_combat of game
@@ -655,6 +687,7 @@ define game_tick(game) as:
                     game.food_eaten is game.food_eaten + 1
                     game.meat_eaten is game.meat_eaten + 1
                     game.dna is game.dna + 2
+                    game.mass is clamp of [game.mass + MASS_GAIN_MEAT, 1.0, MASS_MAX]
                     game.event_ate_meat is 1
                     game.event_collect_x is m.px
                     game.event_collect_y is m.py
@@ -685,6 +718,8 @@ define game_tick(game) as:
         game.jet_cooldown is game.jet_cooldown - 1
     if game.jet_active > 0:
         game.jet_active is game.jet_active - 1
+    if game.invuln_timer > 0:
+        game.invuln_timer is game.invuln_timer - 1
 
     # Epic cells (patrol, suction, collision)
     update_epic_cells of game
@@ -1117,6 +1152,7 @@ define clear_events(game) as:
     game.event_poison is 0
     game.event_electric is 0
     game.event_jet is 0
+    game.event_player_hurt is 0
 
 # ============================================================
 # Input mapping

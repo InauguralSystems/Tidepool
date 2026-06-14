@@ -26,7 +26,9 @@ define parse_train_args() as:
         "batch_size": 8,
         "buffer_size": 5000,
         "target_update": 100,
-        "tick_limit": 300
+        "tick_limit": 300,
+        "resume": 0,
+        "eps_start_override": -1.0
     }
     i is 0
     loop while i < (len of argv):
@@ -58,12 +60,33 @@ define parse_train_args() as:
             if i + 1 < (len of argv):
                 i is i + 1
                 result.target_update is floor of (num of argv[i])
+        elif argv[i] == "--resume":
+            result.resume is 1
+        elif argv[i] == "--eps-start":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.eps_start_override is num of argv[i]
         i is i + 1
     return result
 
 hp is parse_train_args of null
 if hp.seed >= 0:
     seed_random of hp.seed
+
+# When resuming an already-trained checkpoint, don't blow it up with a full
+# epsilon=1.0 random restart — start exploration low (or at --eps-start).
+if hp.resume == 1 and hp.eps_start_override < 0.0:
+    hp.epsilon_start is 0.5
+if hp.eps_start_override >= 0.0:
+    hp.epsilon_start is hp.eps_start_override
+
+# Adaptive epsilon schedule: anneal from epsilon_start to epsilon_end over
+# ~60% of training so the greedy policy is actually exploited and refined in
+# the back third. Overrides the fixed default decay (which barely moved over
+# a few hundred episodes and left the policy mostly random the whole run).
+if hp.episodes > 1:
+    anneal_eps is 0.6 * hp.episodes
+    hp.epsilon_decay is pow of [(hp.epsilon_end / hp.epsilon_start), 1.0 / anneal_eps]
 
 # ============================================================
 # Transpose helper
@@ -334,9 +357,21 @@ define copy_weights(src, dst) as:
 # Reward function
 # ============================================================
 
-define compute_reward(game, prev_score, prev_energy) as:
+# Distance to the nearest active food (torus metric). Used for dense
+# reward shaping so the agent gets a gradient every tick rather than only
+# on the rare food-eaten event.
+define nearest_food_dist(game) as:
+    best is 9999.0
+    for i in range of (len of game.food):
+        if game.food[i].active == 1:
+            d is torus_dist of [game.px, game.py, game.food[i].px, game.food[i].py, game.world_w, game.world_h]
+            if d < best:
+                best is d
+    return best
+
+define compute_reward(game, prev_score, prev_energy, prev_food_dist, cur_food_dist) as:
     r is 0.0
-    # Food eaten since last tick
+    # Food eaten since last tick (sparse, high-value)
     if game.score > prev_score:
         r is r + 10.0
     # Energy change (small penalty for losing energy)
@@ -347,6 +382,14 @@ define compute_reward(game, prev_score, prev_energy) as:
         r is r - 20.0
     # Small survival bonus
     r is r + 0.01
+    # Dense shaping: reward closing distance to the nearest food. Clamped so
+    # torus wrap-around jumps (which flip sign of the delta) can't be farmed.
+    delta is prev_food_dist - cur_food_dist
+    if delta > 0.5:
+        delta is 0.5
+    elif delta < -0.5:
+        delta is -0.5
+    r is r + 0.5 * delta
     return r
 
 # ============================================================
@@ -359,6 +402,13 @@ print of f"Buffer: {hp.buffer_size}, Target update: {hp.target_update}"
 print of "---"
 
 online is new_policy of null
+if hp.resume == 1:
+    loaded is load_policy of null
+    if loaded != null:
+        online is loaded
+        print of f"Resumed from {POLICY_PATH} (eps_start {hp.epsilon_start})"
+    else:
+        print of "No usable checkpoint found — starting fresh"
 target_net is new_policy of null
 copy_weights of [online, target_net]
 buf is new_buffer of hp.buffer_size
@@ -370,7 +420,7 @@ recent_scores is []
 recent_lengths is []
 
 for ep in range of hp.episodes:
-    game is new_game of [60.0, 30.0, random_int of [1, 99999]]
+    game is new_game of [40.0, 20.0, random_int of [1, 99999]]
     obs_stack is new_observation_stack of null
     raw_obs is build_observation of game
     push_observation of [obs_stack, raw_obs]
@@ -379,6 +429,7 @@ for ep in range of hp.episodes:
     ep_length is 0
     prev_score is 0
     prev_energy is game.energy
+    prev_food_dist is nearest_food_dist of game
 
     for tick in range of hp.tick_limit:
         # Epsilon-greedy action selection
@@ -414,10 +465,12 @@ for ep in range of hp.episodes:
         next_raw_obs is build_observation of game
         push_observation of [obs_stack, next_raw_obs]
         next_obs is build_stacked_observation of [obs_stack, game]
-        reward is compute_reward of [game, prev_score, prev_energy]
+        cur_food_dist is nearest_food_dist of game
+        reward is compute_reward of [game, prev_score, prev_energy, prev_food_dist, cur_food_dist]
         done is game.game_over
         prev_score is game.score
         prev_energy is game.energy
+        prev_food_dist is cur_food_dist
 
         # Store transition
         buffer_add of [buf, obs, action, reward, next_obs, done]
@@ -470,9 +523,16 @@ for ep in range of hp.episodes:
             save_policy of online
             print of f"  -> new best avg score {best_avg_score}, saved"
 
-# Final save
-online.loaded is 1
-save_policy of online
+# Keep the BEST checkpoint as the saved policy. The previous unconditional
+# final save overwrote it with the last-episode policy, which DQN often
+# degrades late in training (catastrophic forgetting) — so the saved model
+# could be far worse than the best one the run actually found. Only fall back
+# to saving the final policy if no checkpoint was ever saved (very short runs
+# that never hit a 50-episode print).
+if best_avg_score <= -9999.0:
+    online.loaded is 1
+    save_policy of online
+    print of "(no checkpoint beat the initial bar; saved final policy)"
 print of "---"
 print of f"Training complete. Best avg score: {best_avg_score}"
-print of f"Model saved to {POLICY_PATH}"
+print of f"Best policy saved to {POLICY_PATH}"
