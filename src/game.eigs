@@ -395,6 +395,7 @@ define game_tick(game) as:
                 game.food_eaten is game.food_eaten + 1
                 game.plants_eaten is game.plants_eaten + 1
                 game.dna is game.dna + 1
+                game.mass is clamp of [game.mass + MASS_GAIN_FOOD, 1.0, MASS_MAX]
                 game.event_ate_plant is 1
                 # Respawn food elsewhere
                 f.px is rand_range_f of [0, ww]
@@ -612,6 +613,7 @@ define game_tick(game) as:
                         pred.active is 0
                         game.score is game.score + 10 + pred.size * 3
                         game.dna is game.dna + 3
+                        game.mass is clamp of [game.mass + MASS_GAIN_KILL, 1.0, MASS_MAX]
                         game.event_kill_x is pred.px
                         game.event_kill_y is pred.py
                         game.event_kill_palette is pred.spec.palette
@@ -685,6 +687,7 @@ define game_tick(game) as:
                     game.food_eaten is game.food_eaten + 1
                     game.meat_eaten is game.meat_eaten + 1
                     game.dna is game.dna + 2
+                    game.mass is clamp of [game.mass + MASS_GAIN_MEAT, 1.0, MASS_MAX]
                     game.event_ate_meat is 1
                     game.event_collect_x is m.px
                     game.event_collect_y is m.py

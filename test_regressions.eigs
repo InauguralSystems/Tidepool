@@ -79,6 +79,28 @@ assert of [game.energy > before_energy, "eating food increases energy"]
 print of "  food collision: ok"
 
 # ------------------------------------------------------------
+# Growth — eating increases mass, which feeds creature_radius (size) and
+# creature_collision_power (combat strength). Mass was previously frozen
+# at 1, leaving the whole grow-bigger arc inert.
+# ------------------------------------------------------------
+game is new_game of [60.0, 20.0, 42]
+for i in range of (len of game.predators):
+    game.predators[i].active is 0
+for i in range of (len of game.food):
+    game.food[i].active is 0
+game.food[0].px is game.px
+game.food[0].py is game.py
+game.food[0].active is 1
+mass_before is game.mass
+power_before is creature_collision_power of [game.creature, game.spikes_level, game.mass]
+game_tick of game
+assert of [game.mass > mass_before, "eating food increases mass"]
+power_after is creature_collision_power of [game.creature, game.spikes_level, game.mass]
+assert of [power_after > power_before, "growing mass increases collision power"]
+
+print of "  growth (mass on eat): ok"
+
+# ------------------------------------------------------------
 # Meat pool — killing predators does not grow the meat list.
 # ------------------------------------------------------------
 game is new_game of [60.0, 20.0, 42]

@@ -16,6 +16,15 @@ MAX_SPECIES is 8
 MAX_EPIC_CELLS is 2
 SCALE_TIER_COUNT is 5
 
+# Growth — mass increases as the cell eats, driving size (creature_radius)
+# and combat strength (creature_collision_power). This is the eat->grow->
+# dominate arc: start weak (mass 1, power ~1) and grow strong enough to turn
+# on the predators that once hunted you.
+MASS_GAIN_FOOD is 0.15
+MASS_GAIN_MEAT is 0.4
+MASS_GAIN_KILL is 1.0
+MASS_MAX is 15.0
+
 # Physics
 SIM_DT is 1.0 / 60.0
 PLAYER_BASE_THRUST is 8.0
