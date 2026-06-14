@@ -101,5 +101,44 @@ assert of [(len of game.meat) == meat_len_before, "spawn_meat does not grow the 
 
 print of "  meat pool: ok"
 
+# ------------------------------------------------------------
+# Combat — a losing collision is no longer a one-hit kill.
+# Old behavior: any predator that out-powered the engaged zone
+# killed the player instantly. Now the player takes an energy bite
+# plus knockback and brief invulnerability, and only dies when
+# energy is exhausted.
+# ------------------------------------------------------------
+game is new_game of [60.0, 20.0, 42]
+# Silence food so energy only changes through combat.
+for i in range of (len of game.food):
+    game.food[i].active is 0
+# Park a single strong predator on the player; disable the rest.
+for i in range of (len of game.predators):
+    game.predators[i].active is 0
+boss is game.predators[0]
+boss.active is 1
+boss.size is 5
+boss.radius is 1.5
+boss.stunned_timer is 0
+boss.px is game.px
+boss.py is game.py
+game.energy is 100
+game.invuln_timer is 0
+
+game_tick of game
+assert of [game.game_over == 0, "strong predator does not one-hit-kill from full energy"]
+assert of [game.energy < 100, "a losing collision costs energy"]
+assert of [game.energy > 0, "a single bite does not drain all energy"]
+assert of [game.invuln_timer > 0, "i-frames engage after taking a bite"]
+
+# A second adjacent hit while invulnerable deals no further damage.
+energy_after_bite is game.energy
+boss.px is game.px
+boss.py is game.py
+game_tick of game
+assert of [game.energy == energy_after_bite, "no further damage while invulnerable"]
+
+print of "  combat (no one-hit kill): ok"
+
 print of ""
 print of "=== All regressions passed ==="
