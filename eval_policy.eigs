@@ -1,0 +1,136 @@
+# ============================================================
+# Tidepool policy evaluation — trained vs autopilot vs random
+# ============================================================
+#
+# Runs each agent over a fixed set of seeds and reports average
+# score, survival length, survival rate, and tier reached. This is
+# the ground-truth check that the from-scratch DQN actually learns:
+# a trained policy should beat random and approach (or beat) the
+# hand-coded autopilot.
+#
+# Usage:
+#   eigenscript eval_policy.eigs --seeds 20 --ticks 600
+
+load_file of "src/game.eigs"
+load_file of "src/neural.eigs"
+
+define parse_eval_args() as:
+    argv is args of null
+    result is {"seeds": 20, "ticks": 600, "world_w": 60.0, "world_h": 30.0}
+    i is 0
+    loop while i < (len of argv):
+        if argv[i] == "--seeds":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.seeds is floor of (num of argv[i])
+        elif argv[i] == "--ticks" or argv[i] == "--steps":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.ticks is floor of (num of argv[i])
+        i is i + 1
+    return result
+
+# Apply a discrete action (0-4) the same way training/inference does.
+define apply_discrete_action(game, action) as:
+    game.thrusting is 0
+    game.braking is 0
+    game.turning is 0
+    if action == 1:
+        game.thrusting is 1
+    elif action == 2:
+        game.turning is -1
+        game.thrusting is 1
+    elif action == 3:
+        game.turning is 1
+        game.thrusting is 1
+    elif action == 4:
+        game.braking is 1
+    return null
+
+# Run one episode with the given agent. Returns a result dict.
+define run_episode(agent, policy, seed, world_w, world_h, tick_limit) as:
+    game is new_game of [world_w, world_h, seed]
+    obs_stack is new_observation_stack of null
+    ep_length is 0
+    for tick in range of tick_limit:
+        if agent == "random":
+            action is random_int of [0, NEURAL_ACTIONS - 1]
+            apply_discrete_action of [game, action]
+            buy is autopilot_buy_mutation of game
+            if buy > 0:
+                game_action of [game, buy]
+        elif agent == "autopilot":
+            autopilot_decide of game
+        elif agent == "trained":
+            raw is build_observation of game
+            push_observation of [obs_stack, raw]
+            obs is build_stacked_observation of [obs_stack, game]
+            policy_decide of [policy, obs, game]
+        game_tick of game
+        ep_length is ep_length + 1
+        if game.game_over == 1:
+            break
+    survived is 1
+    if game.game_over == 1:
+        survived is 0
+    return {
+        "score": game.score,
+        "length": ep_length,
+        "survived": survived,
+        "energy": game.energy,
+        "tier": game.scale_tier
+    }
+
+# Evaluate one agent across all seeds, return aggregate stats.
+define eval_agent(agent, policy, seeds, world_w, world_h, tick_limit) as:
+    total_score is 0.0
+    total_len is 0.0
+    total_survived is 0.0
+    total_tier is 0.0
+    n is len of seeds
+    for i in range of n:
+        r is run_episode of [agent, policy, seeds[i], world_w, world_h, tick_limit]
+        total_score is total_score + r.score
+        total_len is total_len + r.length
+        total_survived is total_survived + r.survived
+        total_tier is total_tier + r.tier
+    return {
+        "agent": agent,
+        "avg_score": total_score / n,
+        "avg_len": total_len / n,
+        "survival_rate": total_survived / n,
+        "avg_tier": total_tier / n
+    }
+
+define print_row(r) as:
+    print of f"{r.agent}	| score {r.avg_score}	| len {r.avg_len}	| survival {r.survival_rate}	| tier {r.avg_tier}"
+
+# ============================================================
+# Main
+# ============================================================
+
+cfg is parse_eval_args of null
+
+seeds is []
+for i in range of cfg.seeds:
+    append of [seeds, 1000 + i * 7]
+
+print of "=== Tidepool policy evaluation ==="
+print of f"seeds {cfg.seeds} | world {cfg.world_w}x{cfg.world_h} | tick_limit {cfg.ticks}"
+print of "---"
+
+r_rand is eval_agent of ["random", null, seeds, cfg.world_w, cfg.world_h, cfg.ticks]
+print_row of r_rand
+
+r_auto is eval_agent of ["autopilot", null, seeds, cfg.world_w, cfg.world_h, cfg.ticks]
+print_row of r_auto
+
+policy is load_policy of null
+if policy == null:
+    print of "trained   | (no models/policy.txt found — train first)"
+else:
+    r_train is eval_agent of ["trained", policy, seeds, cfg.world_w, cfg.world_h, cfg.ticks]
+    print_row of r_train
+
+print of "---"
+print of "done"
