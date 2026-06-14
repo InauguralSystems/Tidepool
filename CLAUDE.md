@@ -14,6 +14,34 @@ tiers. The repo doubles as a real-world stress test for EigenScript — see
 There is no Python/JS/native code here. The game, renderer, and a
 from-scratch DQN trainer are all EigenScript.
 
+## Design intent & priorities
+
+Tidepool is a faithful homage to **Spore's cell stage** (Maxis): diet
+choice (herbivore/carnivore/omnivore), eat food and meat, spend DNA in
+the editor on parts (filter/jaw/proboscis mouths; fin/claw/cilia/poison/
+electric/jet appendages), call a mate to evolve, grow through scale tiers,
+dodge giant "epic" cells. The systems are ported faithfully — it is not a
+loose tribute.
+
+**The differentiator vs. Spore: the cells actually learn.** Spore's
+creatures ran on scripted AI. Tidepool has a neural policy that perceives
+the world the same way a player does (the 107-feature observation) and
+learns to survive. "Spore cell stage where you watch the cells evolve
+their brains, written from scratch in a homemade language" is the pitch.
+
+Current priority order (set by the maintainer):
+
+1. **AI** — make the learned policy genuinely good (it's the unique asset).
+2. **Physics** — deepen the movement/energy/combat simulation.
+3. **Gameplay** — tighten the eat → grow → evolve loop and progression.
+4. **Graphics** — explicitly deferred as polish. Don't spend effort here
+   until the above are solid.
+
+When physics/gameplay change, the AI must be retrained — those edits alter
+the environment the policy learned in. Sequence work as: land a
+physics/gameplay change → retrain → eval, so each step has a clean
+before/after.
+
 ## Toolchain
 
 EigenScript is **not** vendored in this repo. You need its interpreter
@@ -54,7 +82,12 @@ $EIG test_obs_stack.eigs     # neural observation-stacking unit tests
 # Train the DQN policy (writes models/policy.txt):
 $EIG train.eigs --episodes 800 --seed 42
 
-# Evaluate trained vs hand-coded autopilot vs random:
+# Continue training from the saved policy (chain toward convergence —
+# real convergence needs many thousands of episodes, not hundreds):
+$EIG train.eigs --episodes 800 --resume --eps-start 0.4
+
+# Evaluate trained vs hand-coded autopilot vs random (same world the
+# trainer uses, 40x20, so the comparison is apples-to-apples):
 $EIG eval_policy.eigs --seeds 20 --ticks 600
 
 # Play (needs gfx binary + SDL2):
@@ -100,10 +133,20 @@ Load order matters: `game.eigs` loads `constants`, `math_utils`,
   state, nearest food/threat/meat, a 9×9 egocentric grid, global
   summary), stacked over 4 frames + 4 aux = **432 inputs** →
   MLP(64→32→5 actions). Actions: 0=none,1=thrust,2=left,3=right,4=brake.
-- **DQN trainer** (`train.eigs`): epsilon-greedy, target network,
-  circular replay buffer, manual backprop with gradient clipping. Reward
-  in `compute_reward`: +10 per food, −0.1 on energy loss, −20 on death,
-  +0.01 survival.
+- **DQN trainer** (`train.eigs`): epsilon-greedy with an *adaptive*
+  schedule (anneals start→end over ~60% of the run so the greedy policy
+  is actually exploited), target network, circular replay buffer, manual
+  backprop with gradient clipping. Reward in `compute_reward`: +10 per
+  food, −20 on death, +0.01 survival, plus **dense shaping** (±0.5 for
+  closing/opening distance to the nearest food) — without the shaping the
+  signal is too sparse to learn from. Trains on a denser 40×20 world.
+  `--resume` continues from `models/policy.txt`. Evaluate with
+  `eval_policy.eigs` against the autopilot (a strong baseline) and random.
+- **Combat is survivable** (`game_tick` predator-collision branch): a
+  collision you lose deals an energy bite (scaled by the power gap, capped
+  at 60) plus knockback and ~0.75s invulnerability (`invuln_timer`), not
+  an instant kill. You die only when energy hits 0. Epic-cell collisions
+  are still meant to be lethal hazards.
 
 ## EigenScript conventions (quick reference)
 
@@ -117,6 +160,34 @@ Load order matters: `game.eigs` loads `constants`, `math_utils`,
 - f-strings: `f"text {expr}"`.
 - v0.13.0+ niceties available: destructuring `[a, b] is rhs`, slicing
   `a[start:end]`, negative indexing `a[-1]`, default params.
+
+## Physics & gameplay roadmap (known gaps)
+
+Concrete, code-grounded opportunities, roughly ranked by impact-per-effort.
+These are the substance behind the "physics" and "gameplay" priorities.
+
+1. **`game.mass` never changes** — it's set to 1 in `new_game` and written
+   nowhere else, so every mass-derived stat (radius, thrust, turn rate,
+   collision power) is frozen and the "grow bigger" arc is dead. Wiring
+   mass to food/meat eaten is the single highest-impact gameplay fix and
+   unlocks real mass-based momentum in physics.
+2. **Thrust is free** — energy only drains on a flat 1/sec timer
+   (`game_tick`, the `energy_timer` block); thrusting costs nothing. Making
+   thrust draw energy turns locomotion into a real sprint-vs-conserve
+   decision and gives the AI a genuine tradeoff to learn.
+3. **Two progression systems conflict** — tiers auto-advance every 10 food
+   eaten (`game_tick`, the scale-tier block), *and* there's the full
+   Spore-style mate gate (`call_mate` → `update_mate` → `evolve_tier_up`,
+   which costs DNA and does the rich work: respawns species, spawns epic
+   cells). The free food-based auto-tier short-circuits the mate ritual, so
+   the interesting evolve path rarely fires. Pick one canonical gate
+   (the mate path is the faithful, richer one).
+4. **Food is static and teleport-respawns** (`game_tick`, food-collision
+   block sets a new random position). Letting food drift with the rotating
+   water current would make the current matter and the pool feel alive.
+5. **Thin endgame** — progression caps at tier 5 (`SCALE_TIER_COUNT`) with
+   no graduation payoff. A real win state + escalating threat curve gives
+   runs a point.
 
 ## Performance
 
@@ -137,7 +208,15 @@ This project targets slow hardware; `game_tick` is the hot path.
   gitignored.
 - macOS Intel ships EigenScript v0.14.2 with the JIT disabled, and Apple
   Silicon is interpreter-only — performance work won't reproduce there.
-- Scores are sparse: even the hand-coded autopilot eats <1 food per
-  ~400-tick episode at tier 0, and deaths are rare on short episodes.
-  Keep this in mind when judging whether a policy "learns" — survival
-  rate alone is not discriminating on short episodes.
+- Score density depends on world size: on the big 60×30 world even the
+  autopilot eats <1 food per episode and deaths are rare, so it's a poor
+  training/eval signal. The trainer and `eval_policy.eigs` use a denser
+  40×20 world where autopilot (~3.8) clearly beats random (~1.3) and
+  deaths happen — that's the signal the AI learns from. Judge policies on
+  that world, not the default game world.
+- DQN training is noisy and slow on interpreted EigenScript (~3 s/episode
+  on this host). 800 episodes is a proof-of-life snapshot, not
+  convergence; expect to chain `--resume` runs across many thousands.
+- This is an **ephemeral container**: anything not committed (including
+  trained `models/policy.txt`) is lost when it's reclaimed. To persist a
+  long training effort, commit milestone policies with `git add -f`.
