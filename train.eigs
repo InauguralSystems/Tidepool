@@ -170,7 +170,7 @@ define forward_cached(policy, obs_batch) as:
 
 define train_step(online, target, buf, hp) as:
     if buf.size < hp.batch_size:
-        return -1.0
+        return [-1.0, 0.0]
 
     sample is buffer_sample of [buf, hp.batch_size]
     obs is sample[0]
@@ -192,6 +192,7 @@ define train_step(online, target, buf, hp) as:
     bs is hp.batch_size
     dq is zeros of [bs, NEURAL_ACTIONS]
     loss is 0.0
+    total_max_q is 0.0
 
     for i in range of bs:
         # Max Q of next state
@@ -199,6 +200,7 @@ define train_step(online, target, buf, hp) as:
         for a in range of NEURAL_ACTIONS:
             if q_next[i][a] > max_q:
                 max_q is q_next[i][a]
+        total_max_q is total_max_q + max_q
 
         # TD target
         td_target is rewards[i] + hp.gamma * max_q * (1.0 - dones[i])
@@ -330,7 +332,7 @@ define train_step(online, target, buf, hp) as:
             g is -1.0
         online.b3[i] is online.b3[i] - lr * g
 
-    return loss
+    return [loss, total_max_q / bs]
 
 # ============================================================
 # Copy weights from online to target network
@@ -419,6 +421,17 @@ best_avg_score is -9999.0
 recent_scores is []
 recent_lengths is []
 
+# Per-block telemetry: mean loss and mean target-Q over each 50-ep window.
+# Both are reset after each block so the CSV row reflects only that window.
+loss_sum is 0.0
+q_sum is 0.0
+train_step_count is 0
+
+LOG_PATH is "models/train_log.csv"
+mkdir of "models"
+log_buf is "ep,avg_score,avg_len,loss,mean_q,epsilon\n"
+write_text of [LOG_PATH, log_buf]
+
 for ep in range of hp.episodes:
     game is new_game of [40.0, 20.0, random_int of [1, 99999]]
     obs_stack is new_observation_stack of null
@@ -482,7 +495,11 @@ for ep in range of hp.episodes:
         # Train every 4 steps (interpreted EigenScript is slower than C)
         if buf.size >= hp.batch_size:
             if step_count % 4 == 0:
-                train_step of [online, target_net, buf, hp]
+                step_out is train_step of [online, target_net, buf, hp]
+                if step_out[0] >= 0.0:
+                    loss_sum is loss_sum + step_out[0]
+                    q_sum is q_sum + step_out[1]
+                    train_step_count is train_step_count + 1
 
         # Update target network periodically
         if step_count % hp.target_update == 0:
@@ -514,7 +531,20 @@ for ep in range of hp.episodes:
         if n > 0:
             avg_score is avg_score / n
             avg_len is avg_len / n
-        print of f"Ep {ep + 1} | score {avg_score} | len {avg_len} | eps {epsilon} | buf {buf.size}"
+
+        mean_loss is 0.0
+        mean_q is 0.0
+        if train_step_count > 0:
+            mean_loss is loss_sum / train_step_count
+            mean_q is q_sum / train_step_count
+        loss_sum is 0.0
+        q_sum is 0.0
+        train_step_count is 0
+
+        print of f"Ep {ep + 1} | score {avg_score} | len {avg_len} | loss {mean_loss} | Q {mean_q} | eps {epsilon} | buf {buf.size}"
+
+        log_buf is f"{log_buf}{ep + 1},{avg_score},{avg_len},{mean_loss},{mean_q},{epsilon}\n"
+        write_text of [LOG_PATH, log_buf]
 
         # Save best
         if avg_score > best_avg_score:
