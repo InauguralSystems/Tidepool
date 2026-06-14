@@ -166,26 +166,17 @@ Load order matters: `game.eigs` loads `constants`, `math_utils`,
 Concrete, code-grounded opportunities, roughly ranked by impact-per-effort.
 These are the substance behind the "physics" and "gameplay" priorities.
 
-1. **`game.mass` never changes** — it's set to 1 in `new_game` and written
-   nowhere else, so every mass-derived stat (radius, thrust, turn rate,
-   collision power) is frozen and the "grow bigger" arc is dead. Wiring
-   mass to food/meat eaten is the single highest-impact gameplay fix and
-   unlocks real mass-based momentum in physics.
-2. **Thrust is free** — energy only drains on a flat 1/sec timer
-   (`game_tick`, the `energy_timer` block); thrusting costs nothing. Making
-   thrust draw energy turns locomotion into a real sprint-vs-conserve
-   decision and gives the AI a genuine tradeoff to learn.
-3. **Two progression systems conflict** — tiers auto-advance every 10 food
+1. **Two progression systems conflict** — tiers auto-advance every 10 food
    eaten (`game_tick`, the scale-tier block), *and* there's the full
    Spore-style mate gate (`call_mate` → `update_mate` → `evolve_tier_up`,
    which costs DNA and does the rich work: respawns species, spawns epic
    cells). The free food-based auto-tier short-circuits the mate ritual, so
    the interesting evolve path rarely fires. Pick one canonical gate
    (the mate path is the faithful, richer one).
-4. **Food is static and teleport-respawns** (`game_tick`, food-collision
+2. **Food is static and teleport-respawns** (`game_tick`, food-collision
    block sets a new random position). Letting food drift with the rotating
    water current would make the current matter and the pool feel alive.
-5. **Thin endgame** — progression caps at tier 5 (`SCALE_TIER_COUNT`) with
+3. **Thin endgame** — progression caps at tier 5 (`SCALE_TIER_COUNT`) with
    no graduation payoff. A real win state + escalating threat curve gives
    runs a point.
 

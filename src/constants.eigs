@@ -36,6 +36,11 @@ PREDATOR_BASE_DRAG is 1.5
 PREDATOR_BASE_TURN_RATE is 3.0
 FOOD_RADIUS is 0.3
 
+# Energy: baseline 1/sec drain accumulates in game.energy_timer; THRUST_ENERGY_FACTOR
+# is the *additional* multiplier on that accumulation while thrusting. 1.0 = thrust
+# doubles the drain rate (1/sec idle, 2/sec under continuous thrust).
+THRUST_ENERGY_FACTOR is 1.0
+
 # Water current
 CURRENT_SPEED is 0.4
 CURRENT_ROTATE_RATE is 0.05

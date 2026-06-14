@@ -351,8 +351,13 @@ define game_tick(game) as:
         game.px is wrap_coord of [game.px + game.vx * SIM_DT, game.world_w]
         game.py is wrap_coord of [game.py + game.vy * SIM_DT, game.world_h]
 
-        # Energy drain
-        game.energy_timer is game.energy_timer + SIM_DT
+        # Energy drain — thrusting accelerates the accumulator so locomotion
+        # costs energy. Baseline 1/sec idle; THRUST_ENERGY_FACTOR scales the
+        # extra cost when game.thrusting == 1.
+        drain_rate is 1.0
+        if game.thrusting == 1:
+            drain_rate is drain_rate + THRUST_ENERGY_FACTOR
+        game.energy_timer is game.energy_timer + drain_rate * SIM_DT
     if game.energy_timer >= 1.0:
         game.energy_timer is game.energy_timer - 1.0
         game.energy is game.energy - 1
