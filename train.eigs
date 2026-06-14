@@ -26,7 +26,9 @@ define parse_train_args() as:
         "batch_size": 8,
         "buffer_size": 5000,
         "target_update": 100,
-        "tick_limit": 300
+        "tick_limit": 300,
+        "resume": 0,
+        "eps_start_override": -1.0
     }
     i is 0
     loop while i < (len of argv):
@@ -58,12 +60,25 @@ define parse_train_args() as:
             if i + 1 < (len of argv):
                 i is i + 1
                 result.target_update is floor of (num of argv[i])
+        elif argv[i] == "--resume":
+            result.resume is 1
+        elif argv[i] == "--eps-start":
+            if i + 1 < (len of argv):
+                i is i + 1
+                result.eps_start_override is num of argv[i]
         i is i + 1
     return result
 
 hp is parse_train_args of null
 if hp.seed >= 0:
     seed_random of hp.seed
+
+# When resuming an already-trained checkpoint, don't blow it up with a full
+# epsilon=1.0 random restart — start exploration low (or at --eps-start).
+if hp.resume == 1 and hp.eps_start_override < 0.0:
+    hp.epsilon_start is 0.5
+if hp.eps_start_override >= 0.0:
+    hp.epsilon_start is hp.eps_start_override
 
 # Adaptive epsilon schedule: anneal from epsilon_start to epsilon_end over
 # ~60% of training so the greedy policy is actually exploited and refined in
@@ -387,6 +402,13 @@ print of f"Buffer: {hp.buffer_size}, Target update: {hp.target_update}"
 print of "---"
 
 online is new_policy of null
+if hp.resume == 1:
+    loaded is load_policy of null
+    if loaded != null:
+        online is loaded
+        print of f"Resumed from {POLICY_PATH} (eps_start {hp.epsilon_start})"
+    else:
+        print of "No usable checkpoint found — starting fresh"
 target_net is new_policy of null
 copy_weights of [online, target_net]
 buf is new_buffer of hp.buffer_size
