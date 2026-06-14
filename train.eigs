@@ -65,6 +65,14 @@ hp is parse_train_args of null
 if hp.seed >= 0:
     seed_random of hp.seed
 
+# Adaptive epsilon schedule: anneal from epsilon_start to epsilon_end over
+# ~60% of training so the greedy policy is actually exploited and refined in
+# the back third. Overrides the fixed default decay (which barely moved over
+# a few hundred episodes and left the policy mostly random the whole run).
+if hp.episodes > 1:
+    anneal_eps is 0.6 * hp.episodes
+    hp.epsilon_decay is pow of [(hp.epsilon_end / hp.epsilon_start), 1.0 / anneal_eps]
+
 # ============================================================
 # Transpose helper
 # ============================================================
@@ -334,9 +342,21 @@ define copy_weights(src, dst) as:
 # Reward function
 # ============================================================
 
-define compute_reward(game, prev_score, prev_energy) as:
+# Distance to the nearest active food (torus metric). Used for dense
+# reward shaping so the agent gets a gradient every tick rather than only
+# on the rare food-eaten event.
+define nearest_food_dist(game) as:
+    best is 9999.0
+    for i in range of (len of game.food):
+        if game.food[i].active == 1:
+            d is torus_dist of [game.px, game.py, game.food[i].px, game.food[i].py, game.world_w, game.world_h]
+            if d < best:
+                best is d
+    return best
+
+define compute_reward(game, prev_score, prev_energy, prev_food_dist, cur_food_dist) as:
     r is 0.0
-    # Food eaten since last tick
+    # Food eaten since last tick (sparse, high-value)
     if game.score > prev_score:
         r is r + 10.0
     # Energy change (small penalty for losing energy)
@@ -347,6 +367,14 @@ define compute_reward(game, prev_score, prev_energy) as:
         r is r - 20.0
     # Small survival bonus
     r is r + 0.01
+    # Dense shaping: reward closing distance to the nearest food. Clamped so
+    # torus wrap-around jumps (which flip sign of the delta) can't be farmed.
+    delta is prev_food_dist - cur_food_dist
+    if delta > 0.5:
+        delta is 0.5
+    elif delta < -0.5:
+        delta is -0.5
+    r is r + 0.5 * delta
     return r
 
 # ============================================================
@@ -370,7 +398,7 @@ recent_scores is []
 recent_lengths is []
 
 for ep in range of hp.episodes:
-    game is new_game of [60.0, 30.0, random_int of [1, 99999]]
+    game is new_game of [40.0, 20.0, random_int of [1, 99999]]
     obs_stack is new_observation_stack of null
     raw_obs is build_observation of game
     push_observation of [obs_stack, raw_obs]
@@ -379,6 +407,7 @@ for ep in range of hp.episodes:
     ep_length is 0
     prev_score is 0
     prev_energy is game.energy
+    prev_food_dist is nearest_food_dist of game
 
     for tick in range of hp.tick_limit:
         # Epsilon-greedy action selection
@@ -414,10 +443,12 @@ for ep in range of hp.episodes:
         next_raw_obs is build_observation of game
         push_observation of [obs_stack, next_raw_obs]
         next_obs is build_stacked_observation of [obs_stack, game]
-        reward is compute_reward of [game, prev_score, prev_energy]
+        cur_food_dist is nearest_food_dist of game
+        reward is compute_reward of [game, prev_score, prev_energy, prev_food_dist, cur_food_dist]
         done is game.game_over
         prev_score is game.score
         prev_energy is game.energy
+        prev_food_dist is cur_food_dist
 
         # Store transition
         buffer_add of [buf, obs, action, reward, next_obs, done]
