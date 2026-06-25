@@ -11,6 +11,13 @@ MIN_WORLD_H is 14.0
 # Entity limits
 MAX_FOOD is 52
 MAX_PREDATORS is 24
+# Predator threat scales with tier: count = floor(BASE + tier*PER_TIER),
+# clamped to [BASE, MAX_PREDATORS]. Each evolve adds predators (count) on top
+# of the stronger per-tier specs, so evolving is a tangible risk dial and the
+# weak tier-0 start is survivable enough for a near-random policy to bootstrap.
+# tier 0->4, 1->5, 2->7, 3->8, 4->10.
+PREDATOR_BASE_COUNT is 4
+PREDATOR_PER_TIER is 1.5
 MAX_MEAT is 48
 MAX_SPECIES is 8
 MAX_EPIC_CELLS is 2

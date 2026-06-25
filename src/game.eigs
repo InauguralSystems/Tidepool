@@ -8,6 +8,33 @@ load_file of "src/math_utils.eigs"
 load_file of "src/entities.eigs"
 
 # ============================================================
+# Predator population (tier-scaled count)
+# ============================================================
+
+# How many predators the world holds at a given tier.
+define predators_for_tier(tier) as:
+    n is floor of (PREDATOR_BASE_COUNT + tier * PREDATOR_PER_TIER)
+    return clamp of [n, PREDATOR_BASE_COUNT, MAX_PREDATORS]
+
+# Build one predator from the current species pool at the current tier and
+# append it to game.predators. Shared by new_game (tier 0) and evolve_tier_up
+# (which grows the pool as the tier rises). Reads game.scale_tier + game.species,
+# so both callers must have those set first.
+define spawn_one_predator(game, world_w, world_h) as:
+    x is rand_range_f of [0, world_w]
+    y is rand_range_f of [0, world_h]
+    angle is rand_range_f of [0, 2.0 * PI]
+    sp_id is random_int of [0, 3]
+    size is game.species[sp_id].base_size
+    pred is new_predator of [x, y, angle, sp_id, size]
+    pred.spec is random_creature_spec of [game.scale_tier, game.species[sp_id].diet]
+    pred.spec.palette is game.species[sp_id].spec.palette
+    pred.spec.body_shape is game.species[sp_id].spec.body_shape
+    pred.spec.body_segments is clamp of [size, 1, CREATURE_MAX_SEGMENTS]
+    pred.spec.mouth_type is game.species[sp_id].diet
+    append of [game.predators, pred]
+
+# ============================================================
 # Game state constructor
 # ============================================================
 
@@ -133,21 +160,11 @@ define new_game(world_w, world_h, seed_val) as:
         size is random_int of [1, 3]
         append of [game.species, new_species of [diet, aggro, size]]
 
-    # Spawn initial predators with species-derived specs
-    for i in range of 8:
-        x is rand_range_f of [0, world_w]
-        y is rand_range_f of [0, world_h]
-        angle is rand_range_f of [0, 2.0 * PI]
-        sp_id is random_int of [0, 3]
-        size is game.species[sp_id].base_size
-        pred is new_predator of [x, y, angle, sp_id, size]
-        # Copy species spec and adjust segments to predator size
-        pred.spec is random_creature_spec of [0, game.species[sp_id].diet]
-        pred.spec.palette is game.species[sp_id].spec.palette
-        pred.spec.body_shape is game.species[sp_id].spec.body_shape
-        pred.spec.body_segments is clamp of [size, 1, CREATURE_MAX_SEGMENTS]
-        pred.spec.mouth_type is game.species[sp_id].diet
-        append of [game.predators, pred]
+    # Spawn the tier-0 predator population (count scales with tier; evolving
+    # grows it). game.scale_tier is 0 here, so spawn_one_predator uses tier-0
+    # specs.
+    for i in range of (predators_for_tier of 0):
+        spawn_one_predator of [game, world_w, world_h]
 
     # Pre-allocate meat pool so spawn_meat can reuse slots
     for i in range of MAX_MEAT:
@@ -296,6 +313,16 @@ define evolve_tier_up(game) as:
         pred.spec.body_shape is game.species[sp_id].spec.body_shape
         pred.spec.body_segments is clamp of [pred.size, 1, CREATURE_MAX_SEGMENTS]
         pred.spec.mouth_type is game.species[sp_id].diet
+
+    # Grow the predator population to the new tier's count — each evolve adds
+    # predators on top of the stronger specs (the pool only grows, tracking the
+    # highest tier reached). game.scale_tier is already the new tier here.
+    have is len of game.predators
+    target is predators_for_tier of game.scale_tier
+    if target > have:
+        for i in range of (target - have):
+            spawn_one_predator of [game, game.world_w, game.world_h]
+
     # Epic cells are (re)spawned by update_epic_cells each tick based on the
     # new tier, so no explicit spawn here.
 
