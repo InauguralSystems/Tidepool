@@ -707,9 +707,9 @@ define draw_toast(text, timer, screen_w) as:
     tw is (len of text) * 12 + 16
     tx is floor of ((screen_w - tw) / 2)
     ty is 60
-    gfx_rrect of [tx, ty, tw, 28, 4, 30, 30, 50, alpha]
+    draw_rrect of [tx, ty, tw, 28, 4, 30, 30, 50, alpha]
     if alpha > 80:
-        gfx_text of [tx + 8, ty + 6, text, 220, 220, 240, 2]
+        draw_text of [tx + 8, ty + 6, text, 220, 220, 240, 2]
 
 # ============================================================
 # Tutorial overlay — shown during early gameplay
@@ -728,11 +728,11 @@ define draw_tutorial(game, screen_w) as:
     tw is 380
     tx is floor of ((screen_w - tw) / 2)
     ty is 100
-    gfx_rrect of [tx, ty, tw, 80, 4, 20, 25, 45, alpha]
+    draw_rrect of [tx, ty, tw, 80, 4, 20, 25, 45, alpha]
     if alpha > 60:
-        gfx_text of [tx + 12, ty + 10, "WASD or Arrow keys to move", 180, 200, 220, 2]
-        gfx_text of [tx + 12, ty + 32, "Eat green food to survive", 120, 200, 120, 2]
-        gfx_text of [tx + 12, ty + 54, "Avoid red predators!", 200, 120, 120, 2]
+        draw_text of [tx + 12, ty + 10, "WASD or Arrow keys to move", 180, 200, 220, 2]
+        draw_text of [tx + 12, ty + 32, "Eat green food to survive", 120, 200, 120, 2]
+        draw_text of [tx + 12, ty + 54, "Avoid red predators!", 200, 120, 120, 2]
 
 # ============================================================
 # Check for click hits on UI panels (manual dispatch for buttons)
@@ -1049,12 +1049,12 @@ loop while running == 1:
         if game != null:
             render_world_only of [game, WINDOW_W, WINDOW_H]
             # Dim overlay
-            gfx_rect of [0, 0, WINDOW_W, WINDOW_H, 0, 0, 0, 140]
+            draw_rect of [0, 0, WINDOW_W, WINDOW_H, 0, 0, 0, 140]
             ui.render of [pause_overlay, 0, 0]
             gfx_present of null
 
     elif game_state == STATE_EDITOR:
-        gfx_clear of [12, 18, 30]
+        draw_clear of [12, 18, 30]
         editor_render of [WINDOW_W, WINDOW_H]
         gfx_present of null
 
@@ -1062,7 +1062,7 @@ loop while running == 1:
         if game != null:
             render_world_only of [game, WINDOW_W, WINDOW_H]
             # Dim overlay
-            gfx_rect of [0, 0, WINDOW_W, WINDOW_H, 0, 0, 0, 160]
+            draw_rect of [0, 0, WINDOW_W, WINDOW_H, 0, 0, 0, 160]
             ui.render of [gameover_overlay, 0, 0]
             gfx_present of null
 

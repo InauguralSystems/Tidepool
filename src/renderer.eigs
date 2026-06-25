@@ -5,6 +5,7 @@
 
 load_file of "src/constants.eigs"
 load_file of "src/math_utils.eigs"
+load_file of "src/draw.eigs"
 
 # Rendering constants
 HUD_HEIGHT is 60
@@ -51,7 +52,7 @@ define draw_caustics(screen_w, game_h, tick) as:
             py is y_base + (sin of (px * 0.03 + tick * 0.04 + i)) * 8
             px2 is px + 8
             py2 is y_base + (sin of (px2 * 0.03 + tick * 0.04 + i)) * 8
-            gfx_line of [px, floor of py, px2, floor of py2, 20, 35, 50]
+            draw_line of [px, floor of py, px2, floor of py2, 20, 35, 50]
 
 # ============================================================
 # Particle system — lightweight effect particles
@@ -85,7 +86,7 @@ define draw_particles(cam_x, cam_y, screen_w, game_h, world_w, world_h) as:
         cr is floor of (p.r * alpha_frac)
         cg is floor of (p.g * alpha_frac)
         cb is floor of (p.b * alpha_frac)
-        gfx_circle of [pos[0], pos[1], sz, cr, cg, cb]
+        draw_circle of [pos[0], pos[1], sz, cr, cg, cb]
 
 define spawn_death_burst(x, y, palette_idx) as:
     pal is get_palette of palette_idx
@@ -218,39 +219,39 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
         # Body shape variation
         if spec.body_shape == SHAPE_WIDE:
             # Wide: offset two overlapping circles laterally
-            gfx_circle of [scx - 2, scy, sr, pal.otr, pal.otg, pal.otb]
-            gfx_circle of [scx + 2, scy, sr, pal.otr, pal.otg, pal.otb]
+            draw_circle of [scx - 2, scy, sr, pal.otr, pal.otg, pal.otb]
+            draw_circle of [scx + 2, scy, sr, pal.otr, pal.otg, pal.otb]
         elif spec.body_shape == SHAPE_TALL:
             # Tall: offset two overlapping circles vertically
-            gfx_circle of [scx, scy - 2, sr, pal.otr, pal.otg, pal.otb]
-            gfx_circle of [scx, scy + 2, sr, pal.otr, pal.otg, pal.otb]
+            draw_circle of [scx, scy - 2, sr, pal.otr, pal.otg, pal.otb]
+            draw_circle of [scx, scy + 2, sr, pal.otr, pal.otg, pal.otb]
         elif spec.body_shape == SHAPE_SHELL:
             # Shell: outer + inner accent ring
-            gfx_circle of [scx, scy, sr + 1, pal.otr, pal.otg, pal.otb]
+            draw_circle of [scx, scy, sr + 1, pal.otr, pal.otg, pal.otb]
             if sr > 4:
-                gfx_circle of [scx, scy, clamp of [sr - 3, 3, sr], pal.ar, pal.ag, pal.ab]
+                draw_circle of [scx, scy, clamp of [sr - 3, 3, sr], pal.ar, pal.ag, pal.ab]
         else:
             # Orb: simple circle
-            gfx_circle of [scx, scy, sr, pal.otr, pal.otg, pal.otb]
+            draw_circle of [scx, scy, sr, pal.otr, pal.otg, pal.otb]
 
         # Inner dark core on each segment
         core_r is clamp of [floor of (sr / 2), 2, 10]
-        gfx_circle of [scx, scy, core_r, pal.ir, pal.ig, pal.ib]
+        draw_circle of [scx, scy, core_r, pal.ir, pal.ig, pal.ib]
 
         i is i - 1
 
     # Pattern overlay on head segment
     if spec.pattern == PATTERN_SPOTS:
         ps is clamp of [floor of (radius / 6), 2, 5]
-        gfx_circle of [sx - floor of (radius / 3), sy + floor of (radius / 4), ps, pal.ar, pal.ag, pal.ab]
-        gfx_circle of [sx + floor of (radius / 3), sy - floor of (radius / 4), ps, pal.ar, pal.ag, pal.ab]
+        draw_circle of [sx - floor of (radius / 3), sy + floor of (radius / 4), ps, pal.ar, pal.ag, pal.ab]
+        draw_circle of [sx + floor of (radius / 3), sy - floor of (radius / 4), ps, pal.ar, pal.ag, pal.ab]
     elif spec.pattern == PATTERN_STRIPES:
         half is floor of (radius / 2)
-        gfx_line of [sx - half, sy - 2, sx + half, sy - 2, pal.ar, pal.ag, pal.ab]
-        gfx_line of [sx - half, sy + 2, sx + half, sy + 2, pal.ar, pal.ag, pal.ab]
+        draw_line of [sx - half, sy - 2, sx + half, sy - 2, pal.ar, pal.ag, pal.ab]
+        draw_line of [sx - half, sy + 2, sx + half, sy + 2, pal.ar, pal.ag, pal.ab]
     elif spec.pattern == PATTERN_CORE:
         cr is clamp of [floor of (radius / 3), 3, 10]
-        gfx_circle of [sx, sy, cr, pal.ar, pal.ag, pal.ab]
+        draw_circle of [sx, sy, cr, pal.ar, pal.ag, pal.ab]
 
     # Appendages
     for ai in range of max_sockets:
@@ -267,33 +268,33 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
             mid_y is base_y + floor of (ly * side * (radius * 0.4 + 6))
 
             # Draw the appendage stalk
-            gfx_line of [base_x, base_y, mid_x, mid_y, pal.ar, pal.ag, pal.ab]
+            draw_line of [base_x, base_y, mid_x, mid_y, pal.ar, pal.ag, pal.ab]
 
             if app_type == APPENDAGE_FIN:
                 # Fin: wavy V-shape
                 wave is (sin of (tick * 0.15 + ai * 1.0)) * 3.0
                 tip_x is mid_x + floor of (fx * wave)
                 tip_y is mid_y + floor of (fy * wave)
-                gfx_line of [mid_x, mid_y, tip_x, tip_y, pal.er, pal.eg, pal.eb]
-                gfx_line of [mid_x, mid_y, tip_x + floor of (fx * 6), tip_y + floor of (fy * 6), pal.er, pal.eg, pal.eb]
+                draw_line of [mid_x, mid_y, tip_x, tip_y, pal.er, pal.eg, pal.eb]
+                draw_line of [mid_x, mid_y, tip_x + floor of (fx * 6), tip_y + floor of (fy * 6), pal.er, pal.eg, pal.eb]
             elif app_type == APPENDAGE_CLAW:
                 # Claw: forked lines
                 tip_x is mid_x + floor of (lx * side * 8)
                 tip_y is mid_y + floor of (ly * side * 8)
-                gfx_line of [mid_x, mid_y, tip_x, tip_y, pal.ar, pal.ag, pal.ab]
-                gfx_line of [tip_x, tip_y, tip_x + floor of (fx * 5 + lx * side * 3), tip_y + floor of (fy * 5 + ly * side * 3), pal.ar, pal.ag, pal.ab]
-                gfx_line of [tip_x, tip_y, tip_x + floor of (0 - fx * 3 + lx * side * 4), tip_y + floor of (0 - fy * 3 + ly * side * 4), pal.ar, pal.ag, pal.ab]
+                draw_line of [mid_x, mid_y, tip_x, tip_y, pal.ar, pal.ag, pal.ab]
+                draw_line of [tip_x, tip_y, tip_x + floor of (fx * 5 + lx * side * 3), tip_y + floor of (fy * 5 + ly * side * 3), pal.ar, pal.ag, pal.ab]
+                draw_line of [tip_x, tip_y, tip_x + floor of (0 - fx * 3 + lx * side * 4), tip_y + floor of (0 - fy * 3 + ly * side * 4), pal.ar, pal.ag, pal.ab]
             elif app_type == APPENDAGE_CILIA:
                 # Cilia: three wavy tendrils
                 for w in range of 3:
                     wave is (sin of (tick * 0.2 + w * 1.5)) * 2.0
-                    gfx_line of [mid_x, mid_y, mid_x + floor of (fx * (w - 1) * 3 + lx * wave), mid_y + floor of (fy * (w - 1) * 3 + ly * wave), pal.ar, pal.ag, pal.ab]
+                    draw_line of [mid_x, mid_y, mid_x + floor of (fx * (w - 1) * 3 + lx * wave), mid_y + floor of (fy * (w - 1) * 3 + ly * wave), pal.ar, pal.ag, pal.ab]
             elif app_type == APPENDAGE_POISON:
                 # Poison: small dot at end
-                gfx_circle of [mid_x, mid_y, 2, 120, 255, 60]
+                draw_circle of [mid_x, mid_y, 2, 120, 255, 60]
             elif app_type == APPENDAGE_ELECTRIC:
                 # Electric: small dot
-                gfx_circle of [mid_x, mid_y, 2, 100, 180, 255]
+                draw_circle of [mid_x, mid_y, 2, 100, 180, 255]
 
     # Placed spikes from spec
     for si in range of max_sockets:
@@ -307,7 +308,7 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
             y1 is spos[1] + floor of (ly * side * sp_in)
             x2 is spos[0] + floor of (lx * side * sp_out)
             y2 is spos[1] + floor of (ly * side * sp_out)
-            gfx_line of [x1, y1, x2, y2, pal.ar, pal.ag, pal.ab]
+            draw_line of [x1, y1, x2, y2, pal.ar, pal.ag, pal.ab]
 
     # Mutation spikes (radial, from upgrade system)
     if spikes_lvl > 0:
@@ -320,7 +321,7 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
             y1 is sy + floor of ((sin of sa) * sp_in)
             x2 is sx + floor of ((cos of sa) * sp_out)
             y2 is sy + floor of ((sin of sa) * sp_out)
-            gfx_line of [x1, y1, x2, y2, pal.ar, pal.ag, pal.ab]
+            draw_line of [x1, y1, x2, y2, pal.ar, pal.ag, pal.ab]
 
     # Eyes
     for ei in range of max_sockets:
@@ -333,12 +334,12 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
             ey is epos[1] + floor of (ly * side * eye_offset)
             er is clamp of [floor of (radius / 5), 2, 6]
             # Eye white
-            gfx_circle of [ex, ey, er, pal.er, pal.eg, pal.eb]
+            draw_circle of [ex, ey, er, pal.er, pal.eg, pal.eb]
             # Pupil (dark, offset in facing direction)
             px is ex + floor of (fx * er * 0.4)
             py is ey + floor of (fy * er * 0.4)
             pr is clamp of [floor of (er / 2), 1, 3]
-            gfx_circle of [px, py, pr, 18, 24, 28]
+            draw_circle of [px, py, pr, 18, 24, 28]
 
     # Mouth
     mx is sx + floor of (fx * radius * 0.7)
@@ -346,8 +347,8 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
     ms is clamp of [floor of (radius / 4), 3, 10]
     if spec.mouth_type == MOUTH_FILTER:
         # Baleen: three horizontal lines across the front
-        gfx_line of [mx - floor of (lx * ms), my - floor of (ly * ms), mx + floor of (lx * ms), my + floor of (ly * ms), pal.ar, pal.ag, pal.ab]
-        gfx_line of [mx + floor of (fx * 2) - floor of (lx * (ms - 2)), my + floor of (fy * 2) - floor of (ly * (ms - 2)), mx + floor of (fx * 2) + floor of (lx * (ms - 2)), my + floor of (fy * 2) + floor of (ly * (ms - 2)), pal.ar, pal.ag, pal.ab]
+        draw_line of [mx - floor of (lx * ms), my - floor of (ly * ms), mx + floor of (lx * ms), my + floor of (ly * ms), pal.ar, pal.ag, pal.ab]
+        draw_line of [mx + floor of (fx * 2) - floor of (lx * (ms - 2)), my + floor of (fy * 2) - floor of (ly * (ms - 2)), mx + floor of (fx * 2) + floor of (lx * (ms - 2)), my + floor of (fy * 2) + floor of (ly * (ms - 2)), pal.ar, pal.ag, pal.ab]
     elif spec.mouth_type == MOUTH_JAW:
         # V-shape jaw
         jaw_tip_x is mx + floor of (fx * ms)
@@ -356,14 +357,14 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
         jaw_l_y is my - floor of (fy * ms * 0.5) + floor of (ly * ms)
         jaw_r_x is mx - floor of (fx * ms * 0.5) - floor of (lx * ms)
         jaw_r_y is my - floor of (fy * ms * 0.5) - floor of (ly * ms)
-        gfx_line of [jaw_tip_x, jaw_tip_y, jaw_l_x, jaw_l_y, pal.ar, pal.ag, pal.ab]
-        gfx_line of [jaw_tip_x, jaw_tip_y, jaw_r_x, jaw_r_y, pal.ar, pal.ag, pal.ab]
+        draw_line of [jaw_tip_x, jaw_tip_y, jaw_l_x, jaw_l_y, pal.ar, pal.ag, pal.ab]
+        draw_line of [jaw_tip_x, jaw_tip_y, jaw_r_x, jaw_r_y, pal.ar, pal.ag, pal.ab]
     elif spec.mouth_type == MOUTH_PROBOSCIS:
         # Proboscis: extending line with tip dot
         prob_x is mx + floor of (fx * ms * 2)
         prob_y is my + floor of (fy * ms * 2)
-        gfx_line of [mx, my, prob_x, prob_y, pal.ar, pal.ag, pal.ab]
-        gfx_circle of [prob_x, prob_y, clamp of [floor of (ms / 3), 1, 3], pal.ar, pal.ag, pal.ab]
+        draw_line of [mx, my, prob_x, prob_y, pal.ar, pal.ag, pal.ab]
+        draw_circle of [prob_x, prob_y, clamp of [floor of (ms / 3), 1, 3], pal.ar, pal.ag, pal.ab]
 
 # ============================================================
 # Legacy draw_creature — simple fallback (kept for compatibility)
@@ -375,14 +376,14 @@ define draw_creature(sx, sy, angle, radius, r, g, b) as:
         px_radius is 3
 
     # Body circle
-    gfx_circle of [sx, sy, px_radius, r, g, b]
+    draw_circle of [sx, sy, px_radius, r, g, b]
 
     # Direction indicator (line from center forward)
     fx is cos of angle
     fy is sin of angle
     tip_x is floor of (sx + fx * px_radius * 1.3)
     tip_y is floor of (sy + fy * px_radius * 1.3)
-    gfx_line of [sx, sy, tip_x, tip_y, 255, 255, 255]
+    draw_line of [sx, sy, tip_x, tip_y, 255, 255, 255]
 
 # ============================================================
 # Water current visualization — faint parallax lines.
@@ -398,7 +399,7 @@ define draw_water_current(game, cam_x, cam_y, screen_w, game_h) as:
         if pos[0] > 0 and pos[0] < screen_w and pos[1] > 0 and pos[1] < game_h:
             ex is floor of (pos[0] + cx_dir * 15)
             ey is floor of (pos[1] + cy_dir * 15)
-            gfx_line of [pos[0], pos[1], ex, ey, 20, 35, 55]
+            draw_line of [pos[0], pos[1], ex, ey, 20, 35, 55]
 
 # ============================================================
 # World entities — food, meat, predators.
@@ -414,7 +415,7 @@ define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
             sx is floor of (screen_w / 2 + dx * _cam_ppu)
             sy is floor of (game_h / 2 + dy * _cam_ppu)
             if sx > -10 and sx < screen_w + 10 and sy > -10 and sy < game_h + 10:
-                gfx_circle of [sx, sy, 4, 60, 200, 60]
+                draw_circle of [sx, sy, 4, 60, 200, 60]
 
     # Draw meat
     for i in range of (len of game.meat):
@@ -425,7 +426,7 @@ define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
             sx is floor of (screen_w / 2 + dx * _cam_ppu)
             sy is floor of (game_h / 2 + dy * _cam_ppu)
             if sx > -10 and sx < screen_w + 10 and sy > -10 and sy < game_h + 10:
-                gfx_circle of [sx, sy, 5, 180, 60, 60]
+                draw_circle of [sx, sy, 5, 180, 60, 60]
 
     # Draw predators with full creature bodies
     for i in range of (len of game.predators):
@@ -440,7 +441,7 @@ define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
                 # LOD: very small on screen -> simple circle
                 if pred_radius < 8:
                     pal is get_palette of p.spec.palette
-                    gfx_circle of [sx, sy, pred_radius, pal.otr, pal.otg, pal.otb]
+                    draw_circle of [sx, sy, pred_radius, pal.otr, pal.otg, pal.otb]
                 else:
                     draw_creature_body of [p.spec, sx, sy, p.angle, pred_radius, game.tick, 0]
 
@@ -463,9 +464,9 @@ define draw_combat_entities(game, cam_x, cam_y, screen_w, game_h) as:
                 cr is floor of (40 * alpha_frac)
                 cg is floor of (180 * alpha_frac)
                 cb is floor of (40 * alpha_frac)
-                gfx_circle of [pos[0], pos[1], px_r, cr, cg, cb]
+                draw_circle of [pos[0], pos[1], px_r, cr, cg, cb]
                 if px_r > 4:
-                    gfx_circle of [pos[0], pos[1], floor of (px_r * 0.6), floor of (cr * 0.7), floor of (cg * 0.7), floor of (cb * 0.7)]
+                    draw_circle of [pos[0], pos[1], floor of (px_r * 0.6), floor of (cr * 0.7), floor of (cg * 0.7), floor of (cb * 0.7)]
 
     # Electric bolts — white line from source to target
     for i in range of (len of game.electric_bolts):
@@ -475,11 +476,11 @@ define draw_combat_entities(game, cam_x, cam_y, screen_w, game_h) as:
             tp is world_to_screen of [eb.tx, eb.ty, cam_x, cam_y, screen_w, game_h, game.world_w, game.world_h]
             # Flicker: alternate between white and blue
             if eb.lifetime % 2 == 0:
-                gfx_line of [sp[0], sp[1], tp[0], tp[1], 200, 220, 255]
+                draw_line of [sp[0], sp[1], tp[0], tp[1], 200, 220, 255]
             else:
-                gfx_line of [sp[0], sp[1], tp[0], tp[1], 100, 160, 255]
+                draw_line of [sp[0], sp[1], tp[0], tp[1], 100, 160, 255]
             # Bright center dot at target
-            gfx_circle of [tp[0], tp[1], 3, 200, 220, 255]
+            draw_circle of [tp[0], tp[1], 3, 200, 220, 255]
 
     # Epic cells — large dark pulsing circles
     for i in range of (len of game.epic_cells):
@@ -501,7 +502,7 @@ define draw_combat_entities(game, cam_x, cam_y, screen_w, game_h) as:
                     ra is rs * 6.283 / ring_segs
                     rx is pos[0] + floor of ((cos of ra) * ring_r)
                     ry is pos[1] + floor of ((sin of ra) * ring_r)
-                    gfx_point of [rx, ry, 40, 20, 30]
+                    draw_point of [rx, ry, 40, 20, 30]
 
     # Part drops — colored dots with pulsing glow
     for i in range of (len of game.part_drops):
@@ -513,15 +514,15 @@ define draw_combat_entities(game, cam_x, cam_y, screen_w, game_h) as:
                 # Color by type
                 if pd.part_type == 0:
                     # Mouth — red
-                    gfx_circle of [pos[0], pos[1], pulse, 255, 100, 80]
+                    draw_circle of [pos[0], pos[1], pulse, 255, 100, 80]
                 elif pd.part_type == 1:
                     # Appendage — blue
-                    gfx_circle of [pos[0], pos[1], pulse, 80, 150, 255]
+                    draw_circle of [pos[0], pos[1], pulse, 80, 150, 255]
                 else:
                     # Palette — yellow
-                    gfx_circle of [pos[0], pos[1], pulse, 255, 220, 80]
+                    draw_circle of [pos[0], pos[1], pulse, 255, 220, 80]
                 # Inner white dot
-                gfx_circle of [pos[0], pos[1], 2, 255, 255, 255]
+                draw_circle of [pos[0], pos[1], 2, 255, 255, 255]
 
 # ============================================================
 # Process game events into particles
@@ -578,7 +579,7 @@ define draw_mate(game, cam_x, cam_y, screen_w, game_h) as:
         # Heart indicator if arrived
         if game.mate_state == 3:
             pulse is (sin of (game.tick * 0.1)) * 2
-            gfx_circle of [sx, sy - px_rad - 8, floor of (3 + pulse), 255, 100, 150]
+            draw_circle of [sx, sy - px_rad - 8, floor of (3 + pulse), 255, 100, 150]
 
 # ============================================================
 # Tier transition visual effect
@@ -597,13 +598,13 @@ define draw_tier_transition(game, screen_w, game_h) as:
     outer_a is floor of (20 * ring_alpha)
     inner_a is floor of (40 * ring_alpha)
     if outer_a > 1:
-        gfx_circle of [pcx, pcy, ring_rad + 8, 255, 255, 255]
+        draw_circle of [pcx, pcy, ring_rad + 8, 255, 255, 255]
     if inner_a > 1:
-        gfx_circle of [pcx, pcy, ring_rad, 200, 220, 255]
+        draw_circle of [pcx, pcy, ring_rad, 200, 220, 255]
     # Tier text with scale animation
     if game.tier_transition_timer > 80:
         tier_text is f"TIER {game.scale_tier + 1}"
-        gfx_text of [pcx - 40, pcy - 20, tier_text, 255, 255, 255, 3]
+        draw_text of [pcx - 40, pcy - 20, tier_text, 255, 255, 255, 3]
 
 # ============================================================
 # HUD — background, energy bar, text readouts.
@@ -611,8 +612,8 @@ define draw_tier_transition(game, screen_w, game_h) as:
 
 define draw_hud(game, screen_w, game_h) as:
     # Background and separator
-    gfx_rect of [0, game_h, screen_w, HUD_HEIGHT, 15, 15, 25]
-    gfx_rect of [0, game_h, screen_w, 2, 60, 80, 120]
+    draw_rect of [0, game_h, screen_w, HUD_HEIGHT, 15, 15, 25]
+    draw_rect of [0, game_h, screen_w, 2, 60, 80, 120]
 
     # Energy bar
     bar_w is floor of (game.energy * 2)
@@ -623,24 +624,24 @@ define draw_hud(game, screen_w, game_h) as:
     if game.energy < 30:
         bar_color_r is 200
         bar_color_g is 50
-    gfx_rect of [10, game_h + 8, bar_w, 10, bar_color_r, bar_color_g, 50]
-    gfx_text of [10, game_h + 22, f"Energy: {floor of game.energy}", 200, 200, 200, 2]
+    draw_rect of [10, game_h + 8, bar_w, 10, bar_color_r, bar_color_g, 50]
+    draw_text of [10, game_h + 22, f"Energy: {floor of game.energy}", 200, 200, 200, 2]
 
     # Score and DNA
-    gfx_text of [250, game_h + 8, f"Score: {game.score}", 255, 255, 255, 2]
-    gfx_text of [250, game_h + 28, f"DNA: {game.dna}", 100, 220, 255, 2]
+    draw_text of [250, game_h + 8, f"Score: {game.score}", 255, 255, 255, 2]
+    draw_text of [250, game_h + 28, f"DNA: {game.dna}", 100, 220, 255, 2]
 
     # Tier and upgrade hint
-    gfx_text of [450, game_h + 8, f"Tier: {game.scale_tier}", 255, 200, 50, 2]
-    gfx_text of [450, game_h + 28, "1:Spd 2:Sns 3:Spk", 120, 120, 120, 1]
+    draw_text of [450, game_h + 8, f"Tier: {game.scale_tier}", 255, 200, 50, 2]
+    draw_text of [450, game_h + 28, "1:Spd 2:Sns 3:Spk", 120, 120, 120, 1]
 
     # Food eaten and upgrade levels
-    gfx_text of [600, game_h + 8, f"Food: {game.food_eaten}", 60, 200, 60, 2]
-    gfx_text of [600, game_h + 28, f"S:{game.speed_level} N:{game.sense_level} K:{game.spikes_level}", 180, 180, 180, 1]
+    draw_text of [600, game_h + 8, f"Food: {game.food_eaten}", 60, 200, 60, 2]
+    draw_text of [600, game_h + 28, f"S:{game.speed_level} N:{game.sense_level} K:{game.spikes_level}", 180, 180, 180, 1]
 
     # Message
     if (len of game.message) > 0:
-        gfx_text of [10, game_h + 45, game.message, 255, 255, 100, 2]
+        draw_text of [10, game_h + 45, game.message, 255, 255, 100, 2]
 
 # ============================================================
 # Main render function — orchestrates the frame.
@@ -658,7 +659,7 @@ define render_game(game, screen_w, screen_h) as:
     process_game_events of game
     update_particles of null
 
-    gfx_clear of [BG_R, BG_G, BG_B]
+    draw_clear of [BG_R, BG_G, BG_B]
     draw_caustics of [screen_w, game_h, game.tick]
     draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
     draw_entities of [game, cam_x, cam_y, screen_w, game_h]
@@ -683,7 +684,7 @@ define render_world_only(game, screen_w, screen_h) as:
     process_game_events of game
     update_particles of null
 
-    gfx_clear of [BG_R, BG_G, BG_B]
+    draw_clear of [BG_R, BG_G, BG_B]
     draw_caustics of [screen_w, game_h, game.tick]
     draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
     draw_entities of [game, cam_x, cam_y, screen_w, game_h]
@@ -695,17 +696,17 @@ define render_world_only(game, screen_w, screen_h) as:
 
 # Render a static ocean background (animated water lines on dark bg)
 define render_ocean_bg(screen_w, screen_h, tick) as:
-    gfx_clear of [BG_R, BG_G, BG_B]
+    draw_clear of [BG_R, BG_G, BG_B]
     # Animate some faint water current lines across the screen
     for i in range of 20:
         x0 is floor of (i * 42)
         y0 is floor of (200 + (sin of (i * 0.5 + tick * 0.008)) * 80)
         x1 is x0 + 30
         y1 is y0 + floor of ((cos of (i * 0.3 + tick * 0.006)) * 10)
-        gfx_line of [x0, y0, x1, y1, 15, 28, 45]
+        draw_line of [x0, y0, x1, y1, 15, 28, 45]
     for i in range of 15:
         x0 is floor of (i * 55 + 20)
         y0 is floor of (350 + (cos of (i * 0.7 + tick * 0.005)) * 60)
         x1 is x0 + 25
         y1 is y0 + floor of ((sin of (i * 0.4 + tick * 0.007)) * 8)
-        gfx_line of [x0, y0, x1, y1, 12, 24, 40]
+        draw_line of [x0, y0, x1, y1, 12, 24, 40]

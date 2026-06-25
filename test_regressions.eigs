@@ -4,6 +4,7 @@
 
 load_file of "src/game.eigs"
 load_file of "src/editor.eigs"
+load_file of "src/renderer.eigs"
 
 print of "=== Tidepool regressions ==="
 
@@ -217,6 +218,32 @@ for i in range of CREATURE_MAX_SOCKETS:
 assert of [poison_equipped == 1, "unlocked weapon equips via editor"]
 
 print of "  part-drop -> unlock -> editor equip: ok"
+
+# ------------------------------------------------------------
+# Headless rendering — the draw-list layer (src/draw.eigs) lets a frame be
+# built and inspected with NO window (the way DMG's --render-probe inspects
+# its framebuffer). Guards that the renderer runs headless and emits a
+# plausible frame.
+# ------------------------------------------------------------
+rg is new_game of [40.0, 20.0, 99]
+for i in range of 60:
+    autopilot_decide of rg
+    game_tick of rg
+draw_record_begin of null
+render_world_only of [rg, 800, 600]
+n_ops is draw_op_count of null
+n_clear is draw_count_of of "clear"
+n_circle is draw_count_of of "circle"
+draw_record_end of null
+assert of [n_ops > 50, "a rendered world frame emits many draw ops"]
+assert of [n_clear >= 1, "frame clears the background"]
+assert of [n_circle >= 1, "frame draws creatures (circles)"]
+# Recording must not leak into the next capture.
+draw_record_begin of null
+draw_record_end of null
+assert of [(draw_op_count of null) == 0, "record_begin starts a fresh draw-list"]
+
+print of "  headless render (draw-list): ok"
 
 print of ""
 print of "=== All regressions passed ==="

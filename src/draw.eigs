@@ -1,0 +1,112 @@
+# ============================================================
+# Draw-list recording layer over the gfx_* drawing primitives.
+# ============================================================
+# Separates "what to draw" from "issue SDL calls", the way DMG's PPU computes
+# a framebuffer that --render-probe can inspect without a window.
+#
+#   - PLAY mode (default): each draw_* recorder calls the matching gfx_*
+#     builtin directly. Behaviour is identical to calling gfx_* — the args are
+#     passed straight through — so the on-screen result is unchanged.
+#   - RECORD mode: recorders capture each draw as {"op": name, "a": args} into
+#     a list instead of touching SDL, so a frame's drawing can be built and
+#     inspected with NO window. That makes the renderer headless-testable.
+#
+# Only the *drawing* primitives are wrapped. Frame/window control
+# (gfx_present / gfx_poll / gfx_open / gfx_close / gfx_title / gfx_delay) stays
+# as direct gfx_* calls in the frame loop and is never recorded.
+#
+# State lives in a holder dict so the recorders mutate shared dict fields
+# (always visible across modules) rather than reassigning a module global.
+
+_draw is {"rec": 0, "ops": []}
+
+# Begin capturing draws into a fresh list (for headless render tests).
+define draw_record_begin() as:
+    _draw.rec is 1
+    _draw.ops is []
+
+# Stop capturing; return to immediate (play) mode.
+define draw_record_end() as:
+    _draw.rec is 0
+
+# The captured draw-list: list of {"op": <name>, "a": <args list>}.
+define draw_ops() as:
+    return _draw.ops
+
+# Number of draw ops captured.
+define draw_op_count() as:
+    return len of _draw.ops
+
+# How many captured ops are of a given primitive (e.g. "circle", "text").
+define draw_count_of(name) as:
+    c is 0
+    ops is _draw.ops
+    for i in range of (len of ops):
+        if ops[i].op == name:
+            c is c + 1
+    return c
+
+# Recorders ----------------------------------------------------------------
+# Each takes the same arg list it would pass to gfx_*.
+define draw_clear(args) as:
+    if _draw.rec == 1:
+        append of [_draw.ops, {"op": "clear", "a": args}]
+    else:
+        gfx_clear of args
+
+define draw_circle(args) as:
+    if _draw.rec == 1:
+        append of [_draw.ops, {"op": "circle", "a": args}]
+    else:
+        gfx_circle of args
+
+define draw_line(args) as:
+    if _draw.rec == 1:
+        append of [_draw.ops, {"op": "line", "a": args}]
+    else:
+        gfx_line of args
+
+define draw_text(args) as:
+    if _draw.rec == 1:
+        append of [_draw.ops, {"op": "text", "a": args}]
+    else:
+        gfx_text of args
+
+define draw_rect(args) as:
+    if _draw.rec == 1:
+        append of [_draw.ops, {"op": "rect", "a": args}]
+    else:
+        gfx_rect of args
+
+define draw_rrect(args) as:
+    if _draw.rec == 1:
+        append of [_draw.ops, {"op": "rrect", "a": args}]
+    else:
+        gfx_rrect of args
+
+define draw_point(args) as:
+    if _draw.rec == 1:
+        append of [_draw.ops, {"op": "point", "a": args}]
+    else:
+        gfx_point of args
+
+# Replay a captured draw-list to the real gfx_* primitives — e.g. to present
+# a frame that was built in record mode (or screenshot it under Xvfb). Not
+# used on the play path, where recorders draw immediately.
+define draw_replay(ops) as:
+    for i in range of (len of ops):
+        o is ops[i]
+        if o.op == "clear":
+            gfx_clear of o.a
+        elif o.op == "circle":
+            gfx_circle of o.a
+        elif o.op == "line":
+            gfx_line of o.a
+        elif o.op == "text":
+            gfx_text of o.a
+        elif o.op == "rect":
+            gfx_rect of o.a
+        elif o.op == "rrect":
+            gfx_rrect of o.a
+        elif o.op == "point":
+            gfx_point of o.a
