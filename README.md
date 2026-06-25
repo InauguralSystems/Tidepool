@@ -7,6 +7,8 @@ Eat, evolve, survive. Start as a single cell in the primordial pool.
 Consume food, avoid predators, spend DNA on mutations, and grow through
 five scale tiers.
 
+![Tidepool gameplay](docs/screenshot.png)
+
 ## Requirements
 
 EigenScript v0.17.2 or later (with SDL2 graphics):
