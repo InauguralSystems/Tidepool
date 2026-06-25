@@ -1,0 +1,17 @@
+{
+  "name": "Tidepool",
+  "build": { "dockerfile": "Dockerfile" },
+  "workspaceFolder": "/workspaces/Tidepool",
+  "remoteUser": "root",
+
+  // EIGS_DIR/PATH are baked into the image; prove the toolchain resolves.
+  // In a Codespace: `make test` (headless), `make run`/`make shot` (gfx, under
+  // a display or Xvfb).
+  "postCreateCommand": "eigenscript --version && echo \"EIGS_DIR=$EIGS_DIR\"",
+
+  "customizations": {
+    "vscode": {
+      "settings": { "files.associations": { "*.eigs": "python" } }
+    }
+  }
+}
