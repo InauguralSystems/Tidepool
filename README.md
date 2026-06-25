@@ -9,7 +9,7 @@ five scale tiers.
 
 ## Requirements
 
-EigenScript v0.9.3.4 or later (with SDL2 graphics):
+EigenScript v0.17.2 or later (with SDL2 graphics):
 
 ```bash
 git clone https://github.com/InauguralSystems/EigenScript.git

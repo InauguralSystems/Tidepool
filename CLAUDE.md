@@ -48,7 +48,7 @@ EigenScript is **not** vendored in this repo. You need its interpreter
 binary. To build it from source:
 
 ```bash
-git clone --branch v0.14.2 https://github.com/InauguralSystems/EigenScript.git
+git clone --branch v0.17.2 https://github.com/InauguralSystems/EigenScript.git
 cd EigenScript
 make build      # headless binary -> src/eigenscript  (no SDL2 needed)
 make gfx        # graphical binary (requires libsdl2-dev) for the playable game
@@ -59,8 +59,10 @@ make gfx        # graphical binary (requires libsdl2-dev) for the playable game
 - **Graphical** (`make gfx` / `make install-gfx`) is required for
   `tidepool.eigs` itself and `test_frametime.eigs` (they call `gfx_*`).
 - Minimum language version for current features is **v0.13.0** (uses
-  multi-arg `spawn`, `recv_timeout`, `audio_play_loop`); v0.14.2 is the
-  current tested release.
+  multi-arg `spawn`, `recv_timeout`, `audio_play_loop`); **v0.17.2 is the
+  current tested release** (validated headless: regressions, obs-stacking,
+  game_tick, and the train pipeline all pass; `game_tick` ~86 ms vs ~100 ms
+  on 0.16.3).
 
 Run a script:
 
@@ -197,8 +199,9 @@ This project targets slow hardware; `game_tick` is the hot path.
 - Don't compare benchmark numbers across machines; record the host.
 - `models/` (trained weights) is generated; `saves/` and `*.log` are
   gitignored.
-- macOS Intel ships EigenScript v0.14.2 with the JIT disabled, and Apple
-  Silicon is interpreter-only — performance work won't reproduce there.
+- macOS Intel has the JIT live since EigenScript v0.15.2; Apple Silicon
+  (arm64) is interpreter-only until the ARM64 JIT exists — performance work
+  won't reproduce on Apple Silicon.
 - Score density depends on world size: on the big 60×30 world even the
   autopilot eats <1 food per episode and deaths are rare, so it's a poor
   training/eval signal. The trainer and `eval_policy.eigs` use a denser
