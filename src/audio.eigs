@@ -9,11 +9,26 @@
 
 AUDIO_RATE is 22050
 AUDIO_CHANNELS is 1
+MUSIC_PATH is "assets/music/tidepool_background.mp3"
+MUSIC_VOLUME is 50
 
 # Pre-generated sound buffers (populated by audio_game_init)
 _sounds is {}
 _audio_ready is 0
 _ambient_samples is null
+
+# Start the looping background music (streamed via the runtime's audio_music_*
+# builtins, separate from the SFX device). Wrapped in try/catch so the game
+# still runs without music on a runtime that predates those builtins
+# (EigenScript < 0.18.0) or if the asset is missing.
+define audio_start_music() as:
+    try:
+        ok is audio_music_play of [MUSIC_PATH, 0 - 1]
+        if ok == 1:
+            audio_music_volume of MUSIC_VOLUME
+        return ok
+    catch e:
+        return 0
 
 # Generate a frequency sweep with decay envelope.
 # Uses the audio_sweep builtin for continuous phase sweep.

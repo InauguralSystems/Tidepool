@@ -48,7 +48,7 @@ EigenScript is **not** vendored in this repo. You need its interpreter
 binary. To build it from source:
 
 ```bash
-git clone --branch v0.17.2 https://github.com/InauguralSystems/EigenScript.git
+git clone --branch v0.18.0 https://github.com/InauguralSystems/EigenScript.git
 cd EigenScript
 make build      # headless binary -> src/eigenscript  (no SDL2 needed)
 make gfx        # graphical binary (requires libsdl2-dev) for the playable game
@@ -59,7 +59,8 @@ make gfx        # graphical binary (requires libsdl2-dev) for the playable game
 - **Graphical** (`make gfx` / `make install-gfx`) is required for
   `tidepool.eigs` itself and `test_frametime.eigs` (they call `gfx_*`).
 - Minimum language version for current features is **v0.13.0** (uses
-  multi-arg `spawn`, `recv_timeout`, `audio_play_loop`); **v0.17.2 is the
+  multi-arg `spawn`, `recv_timeout`, `audio_play_loop`); background music
+  needs `audio_music_*` (EigenScript 0.18.0); **v0.18.0 is the
   current tested release** (validated headless: regressions, obs-stacking,
   game_tick, and the train pipeline all pass; `game_tick` ~86 ms vs ~100 ms
   on 0.16.3).

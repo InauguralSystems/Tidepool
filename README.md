@@ -40,7 +40,9 @@ all EigenScript.
 
 ## Requirements
 
-EigenScript v0.17.2 or later. Check it out alongside this repo and build it:
+EigenScript v0.18.0 or later (background music needs the `audio_music_*`
+builtins added in 0.18.0; also install `libsdl2-mixer-2.0-0` for music). Check
+it out alongside this repo and build it:
 
 ```bash
 git clone https://github.com/InauguralSystems/EigenScript.git   # ../EigenScript

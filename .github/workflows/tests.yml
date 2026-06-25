@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  EIGS_VERSION: v0.17.2
+  EIGS_VERSION: v0.18.0
 
 jobs:
   headless:

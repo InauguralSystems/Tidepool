@@ -131,6 +131,7 @@ STATE_EDITOR is 4
 # ============================================================
 result is gfx_open of [WINDOW_W, WINDOW_H, "Tidepool"]
 audio_game_init of null
+audio_start_music of null
 running is 1
 if result == 0:
     print of "Failed to open graphics window"

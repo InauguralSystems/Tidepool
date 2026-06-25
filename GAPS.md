@@ -47,3 +47,19 @@ a real limitation hit during non-trivial game development.
 - Workaround: Save training data to file before spawning. Training thread reads from file instead of receiving data as arguments.
 - Proper fix: `spawn of [fn, arg1, arg2, ...]` that deep-copies arguments and passes them to the function. Or support closures that capture local variables by value.
 - **Resolved (EigenScript 0.13.0 commit `5a857d0`):** `spawn of [fn, arg1, arg2, ...]` now passes N positional arguments. Bare `spawn of fn` (zero args) and the original `spawn of [fn, arg]` (one arg) keep working verbatim. Missing trailing params bind to `null`; extra args are ignored. **Args are shared by reference, not deep-copied** — matches the channel model already in place (see EigenScript `docs/BUILTINS.md` thread-safety note). Drop the save-to-file workaround. For the training-data case specifically: pass the training data and channel(s) as positional args to the spawned function directly.
+
+## GAP-007: No audio file / music playback ✅ RESOLVED
+- Found during: Background music (post-1.0 polish)
+- Severity: Medium
+- Workaround: None viable — EigenScript audio was sample-queue only
+  (`audio_open` + `audio_play` of synthesized PCM). A multi-minute MP3 can't be
+  loaded as an EigenScript sample list, and there was no file decode/stream.
+- Proper fix: A streaming file-playback builtin (decode + stream + loop a
+  music file), separate from the SFX sample queue.
+- **Resolved (EigenScript 0.18.0):** `audio_music_play of [path, loops]`
+  (loops `-1` = forever), `audio_music_volume of v` (0–128), and
+  `audio_music_stop of null` stream an mp3/ogg/wav via SDL_mixer on the mixer's
+  own audio device, alongside the SFX queue (two SDL devices, OS-mixed). MP3
+  decode via libmpg123. SDL_mixer is `dlopen`ed lazily; requires
+  `libsdl2-mixer-2.0-0` at runtime. Tidepool now plays a looping background
+  track (`assets/music/tidepool_background.mp3`).

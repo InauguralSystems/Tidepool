@@ -6,6 +6,12 @@ All notable changes to Tidepool are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Looping background music** (`assets/music/tidepool_background.mp3`), played
+  via EigenScript 0.18.0's new `audio_music_*` builtins on startup. Degrades
+  gracefully (no music, no crash) on older runtimes or if the asset is missing.
+  Requires EigenScript **v0.18.0+** and `libsdl2-mixer-2.0-0`. Closes GAP-007.
+
 ### Fixed
 - `spawn_meat` now always produces meat: when the fixed meat pool is full
   (a burst of kills faster than meat expires) it recycles the
