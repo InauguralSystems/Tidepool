@@ -23,7 +23,7 @@ define parse_train_args() as:
         "epsilon_start": 1.0,
         "epsilon_end": 0.05,
         "epsilon_decay": 0.9995,
-        "batch_size": 8,
+        "batch_size": 32,
         "buffer_size": 5000,
         "target_update": 100,
         "tick_limit": 1000,
@@ -184,9 +184,15 @@ define train_step(online, target, buf, hp) as:
     q_all is result[0]
     cache is result[1]
 
-    # Forward on target network for next states
+    # Double-DQN: select the next action with the ONLINE net, evaluate it with
+    # the TARGET net. Vanilla DQN uses target's own max, which compounds
+    # positive function-approx error through the bootstrap and drove Q far
+    # above realisable returns (~96 vs ~7), collapsing the greedy policy to a
+    # single action. Decoupling selection from evaluation removes that bias.
     t_result is forward_cached of [target, next_obs]
-    q_next is t_result[0]
+    q_next_target is t_result[0]
+    o_next is forward_cached of [online, next_obs]
+    q_next_online is o_next[0]
 
     # Compute TD targets and error gradient
     bs is hp.batch_size
@@ -195,23 +201,38 @@ define train_step(online, target, buf, hp) as:
     total_max_q is 0.0
 
     for i in range of bs:
-        # Max Q of next state
-        max_q is q_next[i][0]
+        # Double-DQN value of next state: argmax over the ONLINE net, value
+        # read from the TARGET net at that action.
+        a_star is 0
         for a in range of NEURAL_ACTIONS:
-            if q_next[i][a] > max_q:
-                max_q is q_next[i][a]
-        total_max_q is total_max_q + max_q
+            if q_next_online[i][a] > q_next_online[i][a_star]:
+                a_star is a
+        next_q is q_next_target[i][a_star]
+        total_max_q is total_max_q + next_q
 
         # TD target
-        td_target is rewards[i] + hp.gamma * max_q * (1.0 - dones[i])
+        td_target is rewards[i] + hp.gamma * next_q * (1.0 - dones[i])
 
         # TD error for taken action
         a_taken is actions[i]
         td_err is q_all[i][a_taken] - td_target
-        loss is loss + td_err * td_err
 
-        # Gradient: only for taken action
-        dq[i][a_taken] is (2.0 / bs) * td_err
+        # Huber loss (delta = 1): quadratic for |err| <= 1, linear beyond, so
+        # large TD errors can't dominate the gradient. The gradient is the TD
+        # error clamped to [-1, 1] — capping at the loss level rather than
+        # relying solely on the cruder per-weight clip applied after backprop.
+        abs_err is td_err
+        if abs_err < 0.0:
+            abs_err is 0.0 - abs_err
+        if abs_err <= 1.0:
+            loss is loss + 0.5 * td_err * td_err
+            dq[i][a_taken] is (2.0 / bs) * td_err
+        else:
+            loss is loss + (abs_err - 0.5)
+            grad is 1.0
+            if td_err < 0.0:
+                grad is -1.0
+            dq[i][a_taken] is (2.0 / bs) * grad
 
     loss is loss / bs
 
@@ -237,15 +258,14 @@ define train_step(online, target, buf, hp) as:
         append of [db3, s]
     da2 is matmul of [dq, w3t]
 
-    # ReLU backward for layer 2 (fused with multiply)
-    dz2 is multiply of [da2, (relu of z2)]
-    # Normalize relu output to 0/1 mask: any positive z2 -> 1
+    # ReLU backward for layer 2: pass da2 through where z2 > 0, else 0.
+    # (Allocate the result shape with zeros; the loop below fills every cell,
+    # so there's no need to compute relu(z2) and an elementwise multiply first.)
+    dz2 is zeros of [bs, NEURAL_HIDDEN2]
     for i in range of bs:
         for j in range of NEURAL_HIDDEN2:
             if z2[i][j] > 0:
                 dz2[i][j] is da2[i][j]
-            else:
-                dz2[i][j] is 0.0
 
     # Layer 2: a1 -> z2
     a1t is transpose of a1
@@ -518,14 +538,19 @@ for ep in range of hp.episodes:
         ep_length is ep_length + 1
         step_count is step_count + 1
 
-        # Train every 4 steps (interpreted EigenScript is slower than C)
+        # Train every step. The earlier every-4th-step throttle (a perf hedge
+        # for interpreted EigenScript) starved the network of updates and is a
+        # prime suspect for the flat learning curve; a denser update schedule
+        # plus the larger batch (32) gives a far stronger, less noisy gradient.
+        # Trade-off: wall-clock per episode rises substantially (4x more
+        # train_step calls, each over a 4x-larger batch) — lower --batch or run
+        # fewer episodes if throughput matters on slow hardware.
         if buf.size >= hp.batch_size:
-            if step_count % 4 == 0:
-                step_out is train_step of [online, target_net, buf, hp]
-                if step_out[0] >= 0.0:
-                    loss_sum is loss_sum + step_out[0]
-                    q_sum is q_sum + step_out[1]
-                    train_step_count is train_step_count + 1
+            step_out is train_step of [online, target_net, buf, hp]
+            if step_out[0] >= 0.0:
+                loss_sum is loss_sum + step_out[0]
+                q_sum is q_sum + step_out[1]
+                train_step_count is train_step_count + 1
 
         # Update target network periodically
         if step_count % hp.target_update == 0:
@@ -545,10 +570,6 @@ for ep in range of hp.episodes:
     append of [recent_scores, game.score]
     append of [recent_lengths, ep_length]
     append of [recent_tiers, game.scale_tier]
-    if (len of recent_scores) > 50:
-        recent_scores is []
-        recent_lengths is []
-        recent_tiers is []
 
     # Print every 50 episodes
     if (ep + 1) % 50 == 0:
@@ -592,6 +613,14 @@ for ep in range of hp.episodes:
         stxt is f"{gep}\n{best_avg_score}\n"
         write_text of [f"{STATE_PATH}.tmp", stxt]
         rename of [f"{STATE_PATH}.tmp", STATE_PATH]
+
+        # Reset the block accumulators now that this 50-episode window is
+        # logged, so the next row averages exactly the next 50 episodes.
+        # (Resetting on a len>50 guard instead used to silently drop the
+        # episode that tripped it — every 50th episode — from the curve.)
+        recent_scores is []
+        recent_lengths is []
+        recent_tiers is []
 
 # Keep the BEST checkpoint as the saved policy. The previous unconditional
 # final save overwrote it with the last-episode policy, which DQN often

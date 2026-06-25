@@ -1,13 +1,13 @@
 # ============================================================
 # Neural Policy — MLP inference and training for Tidepool
 # ============================================================
-# Architecture: obs(107) -> hidden1(64, ReLU) -> hidden2(32, ReLU) -> actions(5)
+# Architecture: obs(107) -> hidden1(64, ReLU) -> hidden2(32, ReLU) -> actions(6)
 # obs layout:
 #   0-19   : base features (player state, velocity, nearest food/threat/meat, scale)
 #   20-100 : egocentric 9×9 spatial grid (food=+1, meat=+1.5, threat=-2; cells sum signed)
 #   101-106: global summary (counts + max threat ratio + player-cell food/threat)
-# With 4-frame temporal stacking: input = 107*4 + 4 aux = 432
-# Actions: 0=nothing, 1=thrust, 2=turn_left, 3=turn_right, 4=brake
+# With 4-frame temporal stacking: input = 107*4 + 5 aux = 433
+# Actions: 0=nothing, 1=thrust, 2=turn_left, 3=turn_right, 4=brake, 5=evolve
 
 # Requires: constants.eigs, math_utils.eigs, entities.eigs, game.eigs
 # (loaded by game.eigs — load game.eigs before this file)
