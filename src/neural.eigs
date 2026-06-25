@@ -483,6 +483,6 @@ define load_policy() as:
             append of [flat, num of lines[i]]
     expected is (NEURAL_INPUT_SIZE * NEURAL_HIDDEN1) + NEURAL_HIDDEN1 + (NEURAL_HIDDEN1 * NEURAL_HIDDEN2) + NEURAL_HIDDEN2 + (NEURAL_HIDDEN2 * NEURAL_ACTIONS) + NEURAL_ACTIONS
     if (len of flat) != expected:
-        print of f"Policy file has {len of flat} weights, expected {expected}"
+        print of f"Incompatible policy at {POLICY_PATH}: {len of flat} weights, expected {expected} — the network architecture changed (e.g. obs size or action count). Delete it and retrain."
         return null
     return _unflatten_weights of flat
