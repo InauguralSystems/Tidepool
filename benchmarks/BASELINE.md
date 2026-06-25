@@ -13,7 +13,8 @@ measurements).
 Command:
 
 ```bash
-/home/jon/EigenScript/src/eigenscript test_frametime.eigs
+# $EIG = path to the EigenScript binary, e.g. ../EigenScript/src/eigenscript
+$EIG test_frametime.eigs
 ```
 
 Wall-clock per measurement (ms), median/mean/min/max over 5 runs:
