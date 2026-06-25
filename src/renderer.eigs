@@ -44,15 +44,45 @@ define get_ppu() as:
 # Caustic light background
 # ============================================================
 
+# Drifting plankton — tiny faint motes that drift with the current and twinkle,
+# so the empty water feels alive. Procedural (no state): positions derive from
+# the index + tick and wrap around the screen.
+define draw_plankton(screen_w, game_h, tick, current_angle) as:
+    cxd is cos of current_angle
+    cyd is sin of current_angle
+    drift is tick * 0.12
+    for i in range of 36:
+        rawx is (i * 211 + 23) + cxd * drift + (sin of (i * 1.1 + tick * 0.015)) * 4.0
+        rawy is (i * 137 + 41) + cyd * drift * 0.5 + (cos of (i * 0.9 + tick * 0.02)) * 4.0
+        px is floor of (rawx - (floor of (rawx / screen_w)) * screen_w)
+        py is floor of (rawy - (floor of (rawy / game_h)) * game_h)
+        tw is (sin of (tick * 0.05 + i * 1.3)) * 0.5 + 0.5
+        draw_circle of [px, py, 1, 150, 205, 225, 14 + floor of (tw * 26)]
+
+# Vertical depth gradient — surface light at the top fading into deep dark at
+# the bottom, so the pool reads as having depth instead of a flat fill.
+define draw_ocean_depth(screen_w, game_h) as:
+    bands is 24
+    bh is floor of (game_h / bands) + 1
+    for b in range of bands:
+        t is (b + 0.0) / bands
+        k is 1.0 - t
+        y is floor of (t * game_h)
+        draw_rect of [0, y, screen_w, bh, floor of (BG_R + k * 7), floor of (BG_G + k * 16), floor of (BG_B + k * 28)]
+
 define draw_caustics(screen_w, game_h, tick) as:
-    for i in range of 6:
+    for i in range of 4:
         y_base is game_h / 2 + (sin of (tick * 0.02 + i * 1.5)) * (game_h * 0.3)
+        # Brighter near the surface, fading with depth; gentle shimmer, so the
+        # ripples feel incidental rather than busy.
+        depth_k is 1.0 - clamp of [y_base / game_h, 0.0, 1.0]
+        ca is floor of ((20 + ((sin of (tick * 0.03 + i)) * 0.5 + 0.5) * 26) * (0.4 + depth_k * 0.6))
         for x_step in range of (floor of (screen_w / 8)):
             px is x_step * 8
             py is y_base + (sin of (px * 0.03 + tick * 0.04 + i)) * 8
             px2 is px + 8
             py2 is y_base + (sin of (px2 * 0.03 + tick * 0.04 + i)) * 8
-            draw_line of [px, floor of py, px2, floor of py2, 20, 35, 50]
+            draw_line of [px, floor of py, px2, floor of py2, 45, 80, 105, ca]
 
 # ============================================================
 # Particle system — lightweight effect particles
@@ -454,7 +484,12 @@ define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
             sx is floor of (screen_w / 2 + dx * _cam_ppu)
             sy is floor of (game_h / 2 + dy * _cam_ppu)
             if sx > -10 and sx < screen_w + 10 and sy > -10 and sy < game_h + 10:
-                draw_circle of [sx, sy, 4, 60, 200, 60]
+                # Glowing bioluminescent morsel: soft pulsing halo + body + core
+                shimmer is (sin of (game.tick * 0.1 + i * 0.7)) * 0.5 + 0.5
+                ga is 28 + floor of (shimmer * 26)
+                draw_circle of [sx, sy, 8, 90, 230, 130, ga]
+                draw_circle of [sx, sy, 4, 130, 240, 150, 225]
+                draw_circle of [sx, sy, 2, 225, 255, 210, 255]
 
     # Draw meat
     for i in range of (len of game.meat):
@@ -465,7 +500,10 @@ define draw_entities(game, cam_x, cam_y, screen_w, game_h) as:
             sx is floor of (screen_w / 2 + dx * _cam_ppu)
             sy is floor of (game_h / 2 + dy * _cam_ppu)
             if sx > -10 and sx < screen_w + 10 and sy > -10 and sy < game_h + 10:
-                draw_circle of [sx, sy, 5, 180, 60, 60]
+                # Warm glowing chunk
+                draw_circle of [sx, sy, 9, 200, 70, 70, 36]
+                draw_circle of [sx, sy, 5, 220, 95, 90, 220]
+                draw_circle of [sx, sy, 2, 255, 185, 170, 255]
 
     # Draw predators with full creature bodies
     for i in range of (len of game.predators):
@@ -699,8 +737,10 @@ define render_game(game, screen_w, screen_h) as:
     update_particles of null
 
     draw_clear of [BG_R, BG_G, BG_B]
+    draw_ocean_depth of [screen_w, game_h]
     draw_caustics of [screen_w, game_h, game.tick]
     draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
+    draw_plankton of [screen_w, game_h, game.tick, game.current_angle]
     draw_entities of [game, cam_x, cam_y, screen_w, game_h]
     draw_combat_entities of [game, cam_x, cam_y, screen_w, game_h]
     draw_mate of [game, cam_x, cam_y, screen_w, game_h]
@@ -724,8 +764,10 @@ define render_world_only(game, screen_w, screen_h) as:
     update_particles of null
 
     draw_clear of [BG_R, BG_G, BG_B]
+    draw_ocean_depth of [screen_w, game_h]
     draw_caustics of [screen_w, game_h, game.tick]
     draw_water_current of [game, cam_x, cam_y, screen_w, game_h]
+    draw_plankton of [screen_w, game_h, game.tick, game.current_angle]
     draw_entities of [game, cam_x, cam_y, screen_w, game_h]
     draw_combat_entities of [game, cam_x, cam_y, screen_w, game_h]
     draw_mate of [game, cam_x, cam_y, screen_w, game_h]
