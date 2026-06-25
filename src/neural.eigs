@@ -423,10 +423,18 @@ define _flatten_weights(policy) as:
 define save_policy(policy) as:
     mkdir of "models"
     flat is _flatten_weights of policy
-    text is ""
+    # Build the text in O(n) via join — the old per-element f-string concat was
+    # O(n^2) and took ~36s for ~30k weights (it ran every checkpoint block).
+    parts is []
     for i in range of (len of flat):
-        text is f"{text}{flat[i]}\n"
-    write_text of [POLICY_PATH, text]
+        append of [parts, f"{flat[i]}"]
+    text is join of [parts, "\n"]
+    # Crash-safe: write to a temp file then atomically rename over the target.
+    # A crash mid-write leaves the previous good checkpoint intact (rename is
+    # atomic on POSIX) instead of truncating models/policy.txt to garbage.
+    tmp is f"{POLICY_PATH}.tmp"
+    write_text of [tmp, text]
+    rename of [tmp, POLICY_PATH]
     return 1
 
 define _unflatten_weights(flat) as:

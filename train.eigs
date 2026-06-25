@@ -424,8 +424,10 @@ buf is new_buffer of hp.buffer_size
 epsilon is hp.epsilon_start
 step_count is 0
 best_avg_score is -9999.0
+ep_offset is 0
 recent_scores is []
 recent_lengths is []
+recent_tiers is []
 
 # Per-block telemetry: mean loss and mean target-Q over each 50-ep window.
 # Both are reset after each block so the CSV row reflects only that window.
@@ -434,9 +436,22 @@ q_sum is 0.0
 train_step_count is 0
 
 LOG_PATH is "models/train_log.csv"
+STATE_PATH is "models/train_state.txt"
 mkdir of "models"
-log_buf is "ep,avg_score,avg_len,loss,mean_q,epsilon\n"
-write_text of [LOG_PATH, log_buf]
+# Resume-aware logging: on --resume, continue the prior run's episode count
+# and best-score bar and APPEND to the learning curve instead of clobbering it
+# (so a chained multi-run effort reads as one continuous curve). On a fresh
+# run, start the curve with a header.
+log_buf is "ep,avg_score,avg_len,mean_tier,loss,mean_q,epsilon\n"
+if hp.resume == 1 and (file_exists of STATE_PATH) == 1:
+    st is split of [read_text of STATE_PATH, "\n"]
+    ep_offset is floor of (num of st[0])
+    best_avg_score is num of st[1]
+    if (file_exists of LOG_PATH) == 1:
+        log_buf is read_text of LOG_PATH
+    print of f"Resumed training state: ep_offset={ep_offset}, best_avg_score={best_avg_score}"
+else:
+    write_text of [LOG_PATH, log_buf]
 
 for ep in range of hp.episodes:
     game is new_game of [40.0, 20.0, random_int of [1, 99999]]
@@ -524,24 +539,31 @@ for ep in range of hp.episodes:
     if epsilon < hp.epsilon_end:
         epsilon is hp.epsilon_end
 
-    # Track stats
+    # Track stats. game.scale_tier at episode end == number of evolves this
+    # episode (tier only rises, one per evolve), so mean tier is the headline
+    # signal for whether the policy is learning to use the evolve action.
     append of [recent_scores, game.score]
     append of [recent_lengths, ep_length]
+    append of [recent_tiers, game.scale_tier]
     if (len of recent_scores) > 50:
         recent_scores is []
         recent_lengths is []
+        recent_tiers is []
 
     # Print every 50 episodes
     if (ep + 1) % 50 == 0:
         avg_score is 0.0
         avg_len is 0.0
+        avg_tier is 0.0
         for i in range of (len of recent_scores):
             avg_score is avg_score + recent_scores[i]
             avg_len is avg_len + recent_lengths[i]
+            avg_tier is avg_tier + recent_tiers[i]
         n is len of recent_scores
         if n > 0:
             avg_score is avg_score / n
             avg_len is avg_len / n
+            avg_tier is avg_tier / n
 
         mean_loss is 0.0
         mean_q is 0.0
@@ -552,9 +574,10 @@ for ep in range of hp.episodes:
         q_sum is 0.0
         train_step_count is 0
 
-        print of f"Ep {ep + 1} | score {avg_score} | len {avg_len} | loss {mean_loss} | Q {mean_q} | eps {epsilon} | buf {buf.size}"
+        gep is ep_offset + ep + 1
+        print of f"Ep {gep} | score {avg_score} | len {avg_len} | tier {avg_tier} | loss {mean_loss} | Q {mean_q} | eps {epsilon} | buf {buf.size}"
 
-        log_buf is f"{log_buf}{ep + 1},{avg_score},{avg_len},{mean_loss},{mean_q},{epsilon}\n"
+        log_buf is f"{log_buf}{gep},{avg_score},{avg_len},{avg_tier},{mean_loss},{mean_q},{epsilon}\n"
         write_text of [LOG_PATH, log_buf]
 
         # Save best
@@ -563,6 +586,12 @@ for ep in range of hp.episodes:
             online.loaded is 1
             save_policy of online
             print of f"  -> new best avg score {best_avg_score}, saved"
+
+        # Persist resumable training state (global episode + best bar),
+        # crash-safe via tmp+rename, so --resume continues correctly.
+        stxt is f"{gep}\n{best_avg_score}\n"
+        write_text of [f"{STATE_PATH}.tmp", stxt]
+        rename of [f"{STATE_PATH}.tmp", STATE_PATH]
 
 # Keep the BEST checkpoint as the saved policy. The previous unconditional
 # final save overwrote it with the last-episode policy, which DQN often

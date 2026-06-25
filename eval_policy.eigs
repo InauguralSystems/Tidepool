@@ -94,27 +94,45 @@ define run_episode(agent, policy, seed, world_w, world_h, tick_limit) as:
 
 # Evaluate one agent across all seeds, return aggregate stats.
 define eval_agent(agent, policy, seeds, world_w, world_h, tick_limit) as:
-    total_score is 0.0
+    scores is []
     total_len is 0.0
     total_survived is 0.0
     total_tier is 0.0
     n is len of seeds
     for i in range of n:
         r is run_episode of [agent, policy, seeds[i], world_w, world_h, tick_limit]
-        total_score is total_score + r.score
+        append of [scores, r.score]
         total_len is total_len + r.length
         total_survived is total_survived + r.survived
         total_tier is total_tier + r.tier
+    # Mean score + 95% CI of the mean (1.96 * sample_std / sqrt(n)), so a
+    # trained-vs-baseline gap can be read as real or within noise rather than
+    # trusting a single point estimate over a handful of seeds.
+    mean_score is 0.0
+    for i in range of n:
+        mean_score is mean_score + scores[i]
+    mean_score is mean_score / n
+    var is 0.0
+    for i in range of n:
+        d is scores[i] - mean_score
+        var is var + d * d
+    std is 0.0
+    ci95 is 0.0
+    if n > 1:
+        std is sqrt of (var / (n - 1))
+        ci95 is 1.96 * std / (sqrt of n)
     return {
         "agent": agent,
-        "avg_score": total_score / n,
+        "avg_score": mean_score,
+        "score_std": std,
+        "score_ci95": ci95,
         "avg_len": total_len / n,
         "survival_rate": total_survived / n,
         "avg_tier": total_tier / n
     }
 
 define print_row(r) as:
-    print of f"{r.agent}	| score {r.avg_score}	| len {r.avg_len}	| survival {r.survival_rate}	| tier {r.avg_tier}"
+    print of f"{r.agent}	| score {r.avg_score} +/-{r.score_ci95}	| len {r.avg_len}	| survival {r.survival_rate}	| tier {r.avg_tier}"
 
 # ============================================================
 # Main

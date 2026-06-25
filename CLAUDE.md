@@ -149,10 +149,27 @@ Load order matters: `game.eigs` loads `constants`, `math_utils`,
   food) — without the shaping the signal is too sparse to learn from. The
   death penalty for the harsher world a new tier summons is the
   counter-pressure that makes *when* to evolve a real decision. Trains on a
-  denser 40×20 world. `--resume` continues from `models/policy.txt`
-  (incompatible with pre-6-action policies — retrain from scratch).
-  Evaluate with `eval_policy.eigs` against the autopilot (a strong baseline
-  that evolves eagerly when eligible) and random.
+  denser 40×20 world (`tick_limit` 1000 so an episode can contain
+  eat→evolve→harder-world cycles).
+- **Checkpointing / resume (hardened for off-box runs):** `save_policy`
+  writes atomically (tmp + `rename`) so a crash can never corrupt
+  `models/policy.txt`, and serializes in O(n) via `join` (~0.2s vs the old
+  O(n²) ~36s). The saved policy is the *best* avg-score checkpoint, not the
+  final (DQN degrades late). `--resume` reloads the best weights **and**
+  `models/train_state.txt` (global episode + best-score bar), continues the
+  episode numbering, and **appends** to the learning curve instead of
+  clobbering it — so a chained multi-run effort reads as one curve. (The
+  replay buffer is not checkpointed; it refills. Pre-6-action policies are
+  incompatible — retrain from scratch.)
+- **Learning curve:** `models/train_log.csv` logs per 50-ep block
+  `ep,avg_score,avg_len,mean_tier,loss,mean_q,epsilon`. **`mean_tier` is the
+  headline signal** — tier only rises (one step per evolve), so mean tier ==
+  mean evolves/episode; watch it to see whether the policy is actually
+  learning to use the evolve action.
+- **Eval:** `eval_policy.eigs` reports score as **mean ± 95% CI** (over
+  `--seeds` seeds) for trained vs the autopilot (a strong baseline that
+  evolves eagerly when eligible) vs random, on the 40×20 world, so a gap can
+  be read as real or within noise. Also reports survival rate and avg tier.
 - **Combat is survivable** (`game_tick` predator-collision branch): a
   collision you lose deals an energy bite (scaled by the power gap, capped
   at 60) plus knockback and ~0.75s invulnerability (`invuln_timer`), not
