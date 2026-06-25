@@ -20,15 +20,19 @@ cd EigenScript && make install-gfx
 
 ## Run
 
+With EigenScript checked out alongside this repo (`../EigenScript`), the
+Makefile handles building the right binary:
+
 ```bash
-eigenscript tidepool.eigs
+make run     # build the graphical binary and play
+make test    # build the headless binary and run the test suite
+make lint    # parse-check every source
 ```
 
-Run headless tests without SDL2:
+Point `EIGS_DIR=` at EigenScript if it's elsewhere. Or run directly:
 
 ```bash
-eigenscript test_game.eigs
-eigenscript test_regressions.eigs
+/path/to/EigenScript/src/eigenscript tidepool.eigs
 ```
 
 ## Status

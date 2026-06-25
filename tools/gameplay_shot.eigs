@@ -1,0 +1,19 @@
+# Default harness for `make shot`: open a window, play a short autopilot
+# episode so the pool is populated, then render the full game frame (with HUD)
+# and hold it long enough for the screenshot to be captured.
+load_file of "src/game.eigs"
+load_file of "src/renderer.eigs"
+
+gfx_open of [800, 600, "Tidepool"]
+game is new_game of [40.0, 20.0, 42]
+
+i is 0
+loop while i < 150:
+    autopilot_decide of game
+    game_tick of game
+    render_game of [game, 800, 600]
+    gfx_present of null
+    gfx_poll of null
+    gfx_delay of 22
+    i is i + 1
+gfx_close of null

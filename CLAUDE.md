@@ -72,6 +72,26 @@ Run a script:
 
 ## Run / test / train / evaluate
 
+The **Makefile** wraps the toolchain so you don't hand-manage the EigenScript
+binary path (it lives in the sibling `../EigenScript` repo; override with
+`EIGS_DIR=`). These work from any directory:
+
+```bash
+make build   # build the headless EigenScript binary
+make test    # headless suite (test_regressions, test_obs_stack, test_game)
+make lint    # parse-check every .eigs source
+make gfx     # build the graphical (SDL2) binary
+make run     # play the game (needs gfx + a display)
+make shot    # headless screenshot -> docs/screenshot.png (needs xvfb + python3-PIL)
+```
+
+`make shot` runs the gfx binary under Xvfb and converts the frame with
+`tools/xwd2png.py` — how the README screenshot is generated, and how to
+iterate on the renderer without a monitor. Training/eval are still run
+directly (below) since they take args.
+
+The raw commands, if you need them:
+
 ```bash
 EIG=/path/to/EigenScript/src/eigenscript
 
