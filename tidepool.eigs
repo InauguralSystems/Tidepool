@@ -191,9 +191,11 @@ define build_diet_overlay() as:
     root.bg is null
     root.border is null
 
-    # Semi-transparent dark overlay (full screen dark rect)
+    # No full-screen scrim — let the atmospheric ocean background show through
+    # so the menu reads as the same pool as the game. The choice panels carry
+    # their own backdrops for text contrast.
     overlay_bg is ui.panel of ["diet_bg", 0, 0, WINDOW_W, WINDOW_H]
-    overlay_bg.bg is [5, 10, 20]
+    overlay_bg.bg is null
     overlay_bg.border is null
     ui.add_child of [root, overlay_bg]
 
