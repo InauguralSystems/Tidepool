@@ -38,7 +38,7 @@ define parse_eval_args() as:
         i is i + 1
     return result
 
-# Apply a discrete action (0-4) the same way training/inference does.
+# Apply a discrete action (0-5) the same way training/inference does.
 define apply_discrete_action(game, action) as:
     game.thrusting is 0
     game.braking is 0
@@ -53,6 +53,9 @@ define apply_discrete_action(game, action) as:
         game.thrusting is 1
     elif action == 4:
         game.braking is 1
+    elif action == 5:
+        # Deliberate evolve (no-op unless game.evolve_ready)
+        game_action of [game, ACTION_EVOLVE]
     return null
 
 # Run one episode with the given agent. Returns a result dict.

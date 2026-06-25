@@ -17,11 +17,17 @@ NEURAL_GRID_SIDE is 9
 NEURAL_GRID_OFFSET is 20
 NEURAL_AUX_OFFSET is 101
 NEURAL_STACK_FRAMES is 4
-NEURAL_AUX_FEATURES is 4
+# Aux features (appended once after the stacked frames): time phase sin/cos,
+# a period pulse, a wander hint, and (index 4) the evolve-eligibility flag so
+# the policy can learn *when* to evolve.
+NEURAL_AUX_FEATURES is 5
 NEURAL_INPUT_SIZE is (NEURAL_OBS_SIZE * NEURAL_STACK_FRAMES) + NEURAL_AUX_FEATURES
 NEURAL_HIDDEN1 is 64
 NEURAL_HIDDEN2 is 32
-NEURAL_ACTIONS is 5
+# Actions: 0=none 1=thrust 2=left+thrust 3=right+thrust 4=brake 5=evolve.
+# Movement + the deliberate evolve decision are learned; mutation-buying
+# stays auto-piloted for now.
+NEURAL_ACTIONS is 6
 
 POLICY_PATH is "models/policy.txt"
 
@@ -83,7 +89,7 @@ define argmax(lst) as:
 define policy_decide(policy, obs, game) as:
     q is policy_forward of [policy, obs]
     action is argmax of q
-    # action: 0=nothing, 1=thrust, 2=turn_left, 3=turn_right, 4=brake
+    # action: 0=nothing 1=thrust 2=turn_left 3=turn_right 4=brake 5=evolve
     game.thrusting is 0
     game.braking is 0
     game.turning is 0
@@ -98,6 +104,10 @@ define policy_decide(policy, obs, game) as:
             game.thrusting is 1
         case 4:
             game.braking is 1
+        case 5:
+            # Deliberate evolve — a no-op unless game.evolve_ready (the
+            # eligibility is exposed to the policy via the obs aux feature).
+            game_action of [game, ACTION_EVOLVE]
     # Also buy mutations like the hand-coded autopilot
     buy is autopilot_buy_mutation of game
     if buy > 0:
@@ -375,6 +385,9 @@ define build_stacked_observation(stack, game) as:
     # Wander turn hint: deterministic from seed + tick
     wander_raw is (game.tick * 2654435761) % 3
     result[aux_base + 3] is wander_raw - 1.0
+    # Evolve eligibility (1 once enough food eaten to advance a tier) — the
+    # signal the policy needs to time ACTION_EVOLVE.
+    result[aux_base + 4] is game.evolve_ready
 
     return result
 

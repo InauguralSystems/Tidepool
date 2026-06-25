@@ -133,17 +133,26 @@ Load order matters: `game.eigs` loads `constants`, `math_utils`,
   (poison clouds, electric bolts, jets) and spikes.
 - **Neural policy** (`src/neural.eigs`): obs is 107 features (player
   state, nearest food/threat/meat, a 9×9 egocentric grid, global
-  summary), stacked over 4 frames + 4 aux = **432 inputs** →
-  MLP(64→32→5 actions). Actions: 0=none,1=thrust,2=left,3=right,4=brake.
+  summary), stacked over 4 frames + 5 aux = **433 inputs** →
+  MLP(64→32→**6 actions**). Actions: 0=none,1=thrust,2=left,3=right,
+  4=brake,**5=evolve**. The 5th aux feature is the evolve-eligibility flag
+  (`game.evolve_ready`), so the policy can perceive when evolving is
+  available and learn to time it. Movement + the evolve decision are
+  learned; **mutation-buying stays auto-piloted** (`autopilot_buy_mutation`
+  is still called for the policy each step).
 - **DQN trainer** (`train.eigs`): epsilon-greedy with an *adaptive*
   schedule (anneals start→end over ~60% of the run so the greedy policy
   is actually exploited), target network, circular replay buffer, manual
   backprop with gradient clipping. Reward in `compute_reward`: +10 per
-  food, −20 on death, +0.01 survival, plus **dense shaping** (±0.5 for
-  closing/opening distance to the nearest food) — without the shaping the
-  signal is too sparse to learn from. Trains on a denser 40×20 world.
-  `--resume` continues from `models/policy.txt`. Evaluate with
-  `eval_policy.eigs` against the autopilot (a strong baseline) and random.
+  food, **+5 per tier advanced (evolve)**, −20 on death, +0.01 survival,
+  plus **dense shaping** (±0.5 for closing/opening distance to the nearest
+  food) — without the shaping the signal is too sparse to learn from. The
+  death penalty for the harsher world a new tier summons is the
+  counter-pressure that makes *when* to evolve a real decision. Trains on a
+  denser 40×20 world. `--resume` continues from `models/policy.txt`
+  (incompatible with pre-6-action policies — retrain from scratch).
+  Evaluate with `eval_policy.eigs` against the autopilot (a strong baseline
+  that evolves eagerly when eligible) and random.
 - **Combat is survivable** (`game_tick` predator-collision branch): a
   collision you lose deals an energy bite (scaled by the power gap, capped
   at 60) plus knockback and ~0.75s invulnerability (`invuln_timer`), not
@@ -168,13 +177,17 @@ Load order matters: `game.eigs` loads `constants`, `math_utils`,
 Concrete, code-grounded opportunities, roughly ranked by impact-per-effort.
 These are the substance behind the "physics" and "gameplay" priorities.
 
-1. **Two progression systems conflict** — tiers auto-advance every 10 food
-   eaten (`game_tick`, the scale-tier block), *and* there's the full
-   Spore-style mate gate (`call_mate` → `update_mate` → `evolve_tier_up`,
-   which costs DNA and does the rich work: respawns species, spawns epic
-   cells). The free food-based auto-tier short-circuits the mate ritual, so
-   the interesting evolve path rarely fires. Pick one canonical gate
-   (the mate path is the faithful, richer one).
+1. ~~**Two progression systems conflict**~~ — **RESOLVED 2026-06-25.**
+   Unified on one canonical gate: eating `FOOD_PER_TIER*(tier+1)` cumulative
+   food sets `game.evolve_ready`; a deliberate `ACTION_EVOLVE` (player key E
+   or policy action 5) runs `evolve_tier_up` (the rich species/predator
+   refresh) to advance one tier. No DNA cost, no mate requirement — the
+   cost is the harsher world it summons, so *when* to evolve is the
+   decision. `call_mate`/`update_mate` are now optional flavor.
+   `evolve_tier_up`'s dead epic-spawn was removed (`update_epic_cells`
+   handles it). Chosen over a pure mate-ritual gate because the policy is
+   the priority and a movement+evolve action space keeps the one off-box
+   training run tractable while letting the cell *learn* when to evolve.
 2. **Food is static and teleport-respawns** (`game_tick`, food-collision
    block sets a new random position). Letting food drift with the rotating
    water current would make the current matter and the pool feel alive.

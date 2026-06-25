@@ -1271,6 +1271,12 @@ define autopilot_decide(game) as:
     sense_range is creature_sense_range of [game.creature, game.sense_level]
     my_power is creature_collision_power of [game.creature, game.spikes_level, game.mass]
 
+    # Evolve as soon as eligible — a simple, reproducible baseline policy for
+    # the deliberate evolve decision. (The learned policy's edge is timing it
+    # better than this eager rule.)
+    if game.evolve_ready == 1:
+        game_action of [game, ACTION_EVOLVE]
+
     # Buy mutations when we can
     buy is autopilot_buy_mutation of game
     if buy > 0:

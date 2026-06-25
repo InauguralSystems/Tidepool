@@ -371,11 +371,17 @@ define nearest_food_dist(game) as:
                 best is d
     return best
 
-define compute_reward(game, prev_score, prev_energy, prev_food_dist, cur_food_dist) as:
+define compute_reward(game, prev_score, prev_energy, prev_food_dist, cur_food_dist, prev_tier) as:
     r is 0.0
     # Food eaten since last tick (sparse, high-value)
     if game.score > prev_score:
         r is r + 10.0
+    # Evolve reward: advancing a tier is real progress. The death penalty for
+    # the harsher world a new tier summons supplies the counter-pressure, so
+    # the policy learns *when* to evolve rather than spamming it the instant
+    # it becomes eligible.
+    if game.scale_tier > prev_tier:
+        r is r + 5.0
     # Energy change (small penalty for losing energy)
     if game.energy < prev_energy:
         r is r - 0.1
@@ -443,6 +449,7 @@ for ep in range of hp.episodes:
     prev_score is 0
     prev_energy is game.energy
     prev_food_dist is nearest_food_dist of game
+    prev_tier is game.scale_tier
 
     for tick in range of hp.tick_limit:
         # Epsilon-greedy action selection
@@ -466,8 +473,11 @@ for ep in range of hp.episodes:
             game.thrusting is 1
         elif action == 4:
             game.braking is 1
+        elif action == 5:
+            # Deliberate evolve (no-op unless game.evolve_ready)
+            game_action of [game, ACTION_EVOLVE]
 
-        # Also buy mutations
+        # Also buy mutations (still auto-piloted, not learned)
         buy is autopilot_buy_mutation of game
         if buy > 0:
             game_action of [game, buy]
@@ -479,11 +489,12 @@ for ep in range of hp.episodes:
         push_observation of [obs_stack, next_raw_obs]
         next_obs is build_stacked_observation of [obs_stack, game]
         cur_food_dist is nearest_food_dist of game
-        reward is compute_reward of [game, prev_score, prev_energy, prev_food_dist, cur_food_dist]
+        reward is compute_reward of [game, prev_score, prev_energy, prev_food_dist, cur_food_dist, prev_tier]
         done is game.game_over
         prev_score is game.score
         prev_energy is game.energy
         prev_food_dist is cur_food_dist
+        prev_tier is game.scale_tier
 
         # Store transition
         buffer_add of [buf, obs, action, reward, next_obs, done]
