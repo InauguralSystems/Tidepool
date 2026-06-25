@@ -26,7 +26,7 @@ define parse_train_args() as:
         "batch_size": 8,
         "buffer_size": 5000,
         "target_update": 100,
-        "tick_limit": 300,
+        "tick_limit": 1000,
         "resume": 0,
         "eps_start_override": -1.0
     }

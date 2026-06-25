@@ -16,7 +16,7 @@ load_file of "src/neural.eigs"
 
 define parse_eval_args() as:
     argv is args of null
-    result is {"seeds": 20, "ticks": 600, "world_w": 40.0, "world_h": 20.0}
+    result is {"seeds": 20, "ticks": 1000, "world_w": 40.0, "world_h": 20.0}
     i is 0
     loop while i < (len of argv):
         if argv[i] == "--seeds":
