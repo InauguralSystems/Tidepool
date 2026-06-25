@@ -1,0 +1,60 @@
+name: tests
+
+# Headless CI: build the pinned EigenScript toolchain, parse-check every
+# source, and run the headless test suite. The gfx entry points
+# (tidepool.eigs, test_frametime, test_gfx, test_input) need SDL2 + a display
+# and are intentionally not run here — only parse-checked.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  EIGS_VERSION: v0.17.2
+
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tidepool
+
+      - name: Build EigenScript ${{ env.EIGS_VERSION }} (headless)
+        run: |
+          git clone --branch "$EIGS_VERSION" --depth 1 \
+            https://github.com/InauguralSystems/EigenScript.git
+          cd EigenScript
+          make build
+          echo "EIG=$PWD/src/eigenscript" >> "$GITHUB_ENV"
+          ./src/eigenscript --version
+
+      - name: Parse-check all sources (--lint)
+        working-directory: tidepool
+        run: |
+          fail=0
+          for f in *.eigs src/*.eigs; do
+            if "$EIG" --lint "$f" 2>&1 | grep -iE "error"; then
+              echo "::error file=$f::parse error"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Headless test suite
+        working-directory: tidepool
+        run: |
+          run_test() {
+            echo "--- $1 ---"
+            out=$("$EIG" "$1" </dev/null 2>&1) || { echo "$out"; echo "::error::$1 exited non-zero"; exit 1; }
+            echo "$out" | tail -3
+            echo "$out" | grep -q "$2" || { echo "::error::$1 missing success marker '$2'"; exit 1; }
+            echo "OK: $1"
+          }
+          run_test test_regressions.eigs "All regressions passed"
+          run_test test_obs_stack.eigs "All observation stacking tests passed"
+          run_test test_game.eigs "Test complete"
