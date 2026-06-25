@@ -3,6 +3,7 @@
 # being on the load path.
 
 load_file of "src/game.eigs"
+load_file of "src/editor.eigs"
 
 print of "=== Tidepool regressions ==="
 
@@ -179,6 +180,43 @@ game_tick of game
 assert of [game.energy == energy_after_bite, "no further damage while invulnerable"]
 
 print of "  combat (no one-hit kill): ok"
+
+# ------------------------------------------------------------
+# Part-drop -> unlock -> editor-equip loop. A gated weapon (poison)
+# must be undiscoverable in the editor until its part drop is collected,
+# then equippable. Guards the full progression chain.
+# ------------------------------------------------------------
+eg is new_game of [40.0, 20.0, 42]
+for i in range of CREATURE_MAX_SOCKETS:
+    eg.creature.appendages[i] is APPENDAGE_NONE
+
+# Locked: clicking poison (part_index 5, app_type 4) equips nothing.
+assert of [(part_unlocked of [eg, PART_TYPE_APPENDAGE, 4]) == 0, "poison starts locked"]
+editor_handle_part_click of [5, eg.creature, eg]
+poison_while_locked is 0
+for i in range of CREATURE_MAX_SOCKETS:
+    if eg.creature.appendages[i] == APPENDAGE_POISON:
+        poison_while_locked is 1
+assert of [poison_while_locked == 0, "locked weapon cannot be equipped"]
+
+# Collect a poison part drop at the player: +5 DNA and unlock.
+eg.px is 5.0
+eg.py is 5.0
+dna_before is eg.dna
+append of [eg.part_drops, new_part_drop of [5.0, 5.0, PART_TYPE_APPENDAGE, 4]]
+update_part_drops of eg
+assert of [eg.dna == dna_before + 5, "collecting a part grants +5 DNA"]
+assert of [(part_unlocked of [eg, PART_TYPE_APPENDAGE, 4]) != 0, "collected part is unlocked"]
+
+# Now the editor equips it.
+editor_handle_part_click of [5, eg.creature, eg]
+poison_equipped is 0
+for i in range of CREATURE_MAX_SOCKETS:
+    if eg.creature.appendages[i] == APPENDAGE_POISON:
+        poison_equipped is 1
+assert of [poison_equipped == 1, "unlocked weapon equips via editor"]
+
+print of "  part-drop -> unlock -> editor equip: ok"
 
 print of ""
 print of "=== All regressions passed ==="
