@@ -237,15 +237,14 @@ define train_step(online, target, buf, hp) as:
         append of [db3, s]
     da2 is matmul of [dq, w3t]
 
-    # ReLU backward for layer 2 (fused with multiply)
-    dz2 is multiply of [da2, (relu of z2)]
-    # Normalize relu output to 0/1 mask: any positive z2 -> 1
+    # ReLU backward for layer 2: pass da2 through where z2 > 0, else 0.
+    # (Allocate the result shape with zeros; the loop below fills every cell,
+    # so there's no need to compute relu(z2) and an elementwise multiply first.)
+    dz2 is zeros of [bs, NEURAL_HIDDEN2]
     for i in range of bs:
         for j in range of NEURAL_HIDDEN2:
             if z2[i][j] > 0:
                 dz2[i][j] is da2[i][j]
-            else:
-                dz2[i][j] is 0.0
 
     # Layer 2: a1 -> z2
     a1t is transpose of a1
@@ -545,10 +544,6 @@ for ep in range of hp.episodes:
     append of [recent_scores, game.score]
     append of [recent_lengths, ep_length]
     append of [recent_tiers, game.scale_tier]
-    if (len of recent_scores) > 50:
-        recent_scores is []
-        recent_lengths is []
-        recent_tiers is []
 
     # Print every 50 episodes
     if (ep + 1) % 50 == 0:
@@ -592,6 +587,14 @@ for ep in range of hp.episodes:
         stxt is f"{gep}\n{best_avg_score}\n"
         write_text of [f"{STATE_PATH}.tmp", stxt]
         rename of [f"{STATE_PATH}.tmp", STATE_PATH]
+
+        # Reset the block accumulators now that this 50-episode window is
+        # logged, so the next row averages exactly the next 50 episodes.
+        # (Resetting on a len>50 guard instead used to silently drop the
+        # episode that tripped it — every 50th episode — from the curve.)
+        recent_scores is []
+        recent_lengths is []
+        recent_tiers is []
 
 # Keep the BEST checkpoint as the saved policy. The previous unconditional
 # final save overwrote it with the last-episode policy, which DQN often
