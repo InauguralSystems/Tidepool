@@ -762,7 +762,7 @@ define game_tick(game) as:
     # progression gate.
     if game.scale_tier < SCALE_TIER_COUNT - 1 and game.food_eaten >= (game.scale_tier + 1) * FOOD_PER_TIER:
         if game.evolve_ready == 0:
-            game.message is "Evolution ready — press E to evolve."
+            game.message is "Evolution ready - press E to evolve."
         game.evolve_ready is 1
     else:
         game.evolve_ready is 0

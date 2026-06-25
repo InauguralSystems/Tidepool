@@ -668,57 +668,74 @@ define draw_tier_transition(game, screen_w, game_h) as:
     pcx is floor of (screen_w / 2)
     pcy is floor of (game_h / 2)
     t_progress is 1.0 - game.tier_transition_timer / 120.0
-    # Expanding light ring
-    ring_rad is floor of (t_progress * 300.0)
-    ring_alpha is (1.0 - t_progress) * 0.8
-    # Faint ring circles
-    outer_a is floor of (20 * ring_alpha)
-    inner_a is floor of (40 * ring_alpha)
-    if outer_a > 1:
-        draw_circle of [pcx, pcy, ring_rad + 8, 255, 255, 255]
-    if inner_a > 1:
-        draw_circle of [pcx, pcy, ring_rad, 200, 220, 255]
-    # Tier text with scale animation
-    if game.tier_transition_timer > 80:
-        tier_text is f"TIER {game.scale_tier + 1}"
-        draw_text of [pcx - 40, pcy - 20, tier_text, 255, 255, 255, 3]
+    fade is 1.0 - t_progress
+    # Expanding pulse of light — translucent, so it reads as a soft shockwave
+    # rather than a solid disc. (The old version computed an alpha but never
+    # passed it, filling the screen opaque white.)
+    rad is floor of (t_progress * 340.0)
+    if rad > 4:
+        draw_circle of [pcx, pcy, rad, 170, 215, 255, floor of (fade * 30)]
+        draw_circle of [pcx, pcy, floor of (rad * 0.72), 205, 232, 255, floor of (fade * 22)]
+    # "TIER N" banner near the top, fading, announcing the tier just reached
+    # (scale_tier is already the new tier here — the old +1 was off by one).
+    if game.tier_transition_timer > 60:
+        tb is 150 + floor of (fade * 105)
+        draw_text of [pcx - 48, 60, f"TIER {game.scale_tier}", 150, tb, 255, 3]
 
 # ============================================================
 # HUD — background, energy bar, text readouts.
 # ============================================================
 
 define draw_hud(game, screen_w, game_h) as:
-    # Background and separator
-    draw_rect of [0, game_h, screen_w, HUD_HEIGHT, 15, 15, 25]
-    draw_rect of [0, game_h, screen_w, 2, 60, 80, 120]
+    # Panel with a glowing cyan accent line along the top edge.
+    draw_rect of [0, game_h, screen_w, HUD_HEIGHT, 11, 15, 25, 238]
+    draw_rect of [0, game_h - 1, screen_w, 1, 90, 200, 220, 90]
+    draw_rect of [0, game_h, screen_w, 2, 60, 150, 180, 120]
 
-    # Energy bar
-    bar_w is floor of (game.energy * 2)
-    if bar_w > 300:
-        bar_w is 300
-    bar_color_r is 50
-    bar_color_g is 200
+    # Energy bar: rounded track + color-by-level fill + a top sheen.
+    tx is 12
+    ty is game_h + 10
+    tw is 200
+    th is 12
+    draw_rrect of [tx, ty, tw, th, 6, 26, 36, 50, 220]
+    e_frac is clamp of [game.energy / 200.0, 0.0, 1.0]
+    fw is floor of (tw * e_frac)
+    er is 60
+    eg is 220
+    eb is 120
+    if game.energy < 60:
+        er is 240
+        eg is 200
+        eb is 70
     if game.energy < 30:
-        bar_color_r is 200
-        bar_color_g is 50
-    draw_rect of [10, game_h + 8, bar_w, 10, bar_color_r, bar_color_g, 50]
-    draw_text of [10, game_h + 22, f"Energy: {floor of game.energy}", 200, 200, 200, 2]
+        er is 240
+        eg is 75
+        eb is 70
+    if fw > 4:
+        draw_rrect of [tx, ty, fw, th, 6, er, eg, eb, 235]
+        draw_rrect of [tx, ty, fw, 4, 4, 255, 255, 255, 45]
+    draw_text of [tx + 3, ty + th + 4, f"Energy {floor of game.energy}", 165, 195, 210, 1]
 
-    # Score and DNA
-    draw_text of [250, game_h + 8, f"Score: {game.score}", 255, 255, 255, 2]
-    draw_text of [250, game_h + 28, f"DNA: {game.dna}", 100, 220, 255, 2]
+    # Stats — two rows, colour-coded.
+    draw_text of [232, game_h + 7, f"Score {game.score}", 235, 240, 245, 2]
+    draw_text of [232, game_h + 31, f"DNA {game.dna}", 110, 220, 255, 1]
+    draw_text of [360, game_h + 7, f"Tier {game.scale_tier}", 255, 205, 90, 2]
+    draw_text of [360, game_h + 31, f"Food {game.food_eaten}", 120, 230, 140, 1]
+    draw_text of [475, game_h + 7, f"S{game.speed_level}  N{game.sense_level}  K{game.spikes_level}", 175, 190, 205, 1]
+    draw_text of [475, game_h + 31, "1:Spd 2:Sns 3:Spk", 105, 118, 135, 1]
 
-    # Tier and upgrade hint
-    draw_text of [450, game_h + 8, f"Tier: {game.scale_tier}", 255, 200, 50, 2]
-    draw_text of [450, game_h + 28, "1:Spd 2:Sns 3:Spk", 120, 120, 120, 1]
+    # Evolve-ready prompt — a pulsing pill, since evolving is now a deliberate
+    # action the player must choose when eligible.
+    if game.evolve_ready == 1:
+        pr is (sin of (game.tick * 0.15)) * 0.5 + 0.5
+        draw_rrect of [612, game_h + 14, 178, 32, 9, 50, 185, 115, floor of (28 + pr * 55)]
+        draw_rrect of [612, game_h + 14, 178, 32, 9, 120, 240, 170, floor of (40 + pr * 70)]
+        tg is 205 + floor of (pr * 50)
+        draw_text of [626, game_h + 24, "PRESS  E  TO  EVOLVE", 150, tg, 180, 1]
 
-    # Food eaten and upgrade levels
-    draw_text of [600, game_h + 8, f"Food: {game.food_eaten}", 60, 200, 60, 2]
-    draw_text of [600, game_h + 28, f"S:{game.speed_level} N:{game.sense_level} K:{game.spikes_level}", 180, 180, 180, 1]
-
-    # Message
+    # Transient message
     if (len of game.message) > 0:
-        draw_text of [10, game_h + 45, game.message, 255, 255, 100, 2]
+        draw_text of [232, game_h + 47, game.message, 245, 240, 150, 1]
 
 # ============================================================
 # Main render function — orchestrates the frame.
