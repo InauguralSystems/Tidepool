@@ -6,6 +6,12 @@ All notable changes to Tidepool are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- `spawn_meat` now always produces meat: when the fixed meat pool is full
+  (a burst of kills faster than meat expires) it recycles the
+  soonest-to-expire slot instead of silently dropping the chunk. Removes an
+  ignored success/fail return that five call sites discarded.
+
 ## [0.1.0] — 2026-06-25
 
 First tagged release: a complete, playable Spore-style cell-stage game with a

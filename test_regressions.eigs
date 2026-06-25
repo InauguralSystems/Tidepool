@@ -141,6 +141,19 @@ result is spawn_meat of [game.meat, 1.0, 1.0, 300]
 assert of [result == 1, "spawn_meat returns 1 when pool has a free slot"]
 assert of [(len of game.meat) == meat_len_before, "spawn_meat does not grow the list"]
 
+# Full pool: spawn_meat recycles the slot closest to expiring instead of
+# silently dropping the meat. Fill every slot, give one a tiny lifetime, then
+# spawn again — it must still succeed without growing the list, and the
+# short-lived slot must now carry the new chunk.
+for i in range of (len of game.meat):
+    game.meat[i].active is 1
+    game.meat[i].lifetime is 200
+game.meat[7].lifetime is 1
+r2 is spawn_meat of [game.meat, 42.0, 42.0, 300]
+assert of [r2 == 1, "spawn_meat still succeeds when the pool is full"]
+assert of [(len of game.meat) == meat_len_before, "full-pool spawn_meat does not grow the list"]
+assert of [game.meat[7].px == 42.0 and game.meat[7].lifetime == 300, "full pool recycles the soonest-to-expire slot"]
+
 print of "  meat pool: ok"
 
 # ------------------------------------------------------------

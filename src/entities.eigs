@@ -273,8 +273,14 @@ define new_meat(x, y, lifetime) as:
 
 # Revive an inactive slot in `list` with meat at (x, y). Returns 1 if a
 # free slot was found, 0 if the pool is exhausted.
+# Drop a meat chunk into the fixed-size pool. Reuses the first free slot, or —
+# if every slot is active (the pool is full, which only happens under a burst
+# of kills faster than meat expires) — recycles the slot with the least
+# remaining lifetime. A kill therefore always produces meat; callers don't have
+# to handle a failure return (it always succeeds, returning 1).
 define spawn_meat(list, x, y, lifetime) as:
-    for i in range of (len of list):
+    n is len of list
+    for i in range of n:
         m is list[i]
         if m.active == 0:
             m.px is x
@@ -282,7 +288,19 @@ define spawn_meat(list, x, y, lifetime) as:
             m.lifetime is lifetime
             m.active is 1
             return 1
-    return 0
+    # Pool full: overwrite the meat closest to expiring.
+    oldest is 0
+    min_life is list[0].lifetime
+    for i in range of n:
+        if list[i].lifetime < min_life:
+            min_life is list[i].lifetime
+            oldest is i
+    om is list[oldest]
+    om.px is x
+    om.py is y
+    om.lifetime is lifetime
+    om.active is 1
+    return 1
 
 # Create a predator
 define new_predator(x, y, angle, species_id, size) as:
