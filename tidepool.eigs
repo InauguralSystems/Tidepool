@@ -805,8 +805,8 @@ loop while running == 1:
                         case "p":
                             game_action of [game, ACTION_POISON]
                         case "e":
-                            # If mate is waiting, evolve; otherwise open editor
-                            if game.mate_state == 3:
+                            # If eligible (enough food eaten), evolve; else editor
+                            if game.evolve_ready == 1:
                                 game_action of [game, ACTION_EVOLVE]
                                 toast_text is f"EVOLVED! Now Tier {game.scale_tier}"
                                 toast_timer is 120

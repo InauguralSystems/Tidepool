@@ -60,6 +60,9 @@ define new_game(world_w, world_h, seed_val) as:
         # Scale tier
         "scale_tier": 0,
         "tier_transition_timer": 0,
+        # 1 once enough food has been eaten to evolve to the next tier;
+        # consumed by ACTION_EVOLVE (evolve is deliberate, not automatic).
+        "evolve_ready": 0,
 
         # Mating system
         "mate_state": 0,
@@ -210,7 +213,7 @@ define update_mate(game) as:
 
     if dist < 1.5:
         game.mate_state is 3
-        game.message is "Mate arrived! Press E to evolve."
+        game.message is "Your mate joins the dance."
         return null
 
     # Steer mate toward player
@@ -237,19 +240,22 @@ define update_mate(game) as:
     game.mate_py is wrap_coord of [game.mate_py + game.mate_vy * SIM_DT, game.world_h]
 
 define evolve_tier_up(game) as:
-    if game.mate_state != 3:
+    # Deliberate, food-gated evolution. The single canonical tier-up path:
+    # eating enough food sets game.evolve_ready (see game_tick), and this
+    # action spends that eligibility to advance a tier and reshape the world
+    # (fresh species pool + respawned predators). No DNA cost and no mate
+    # requirement — the price of evolving is the harsher world it summons, so
+    # *when* to evolve is the interesting decision. The mate ritual
+    # (call_mate / update_mate) is optional flavor, not a gate.
+    if game.evolve_ready != 1:
         return null
-    threshold is mate_dna_threshold of game
-    if game.dna < threshold:
-        game.message is f"Need {threshold} DNA to evolve."
+    if game.scale_tier >= SCALE_TIER_COUNT - 1:
         return null
-    game.dna is game.dna - threshold
-    game.mate_state is 0
 
-    # Tier up
-    if game.scale_tier < SCALE_TIER_COUNT - 1:
-        game.scale_tier is game.scale_tier + 1
-        game.event_tier_up is 1
+    game.scale_tier is game.scale_tier + 1
+    game.event_tier_up is 1
+    game.evolve_ready is 0
+    game.mate_state is 0
     game.tier_transition_timer is 120
     game.message is "A new world unfolds around you..."
 
@@ -290,16 +296,8 @@ define evolve_tier_up(game) as:
         pred.spec.body_shape is game.species[sp_id].spec.body_shape
         pred.spec.body_segments is clamp of [pred.size, 1, CREATURE_MAX_SEGMENTS]
         pred.spec.mouth_type is game.species[sp_id].diet
-
-    # Spawn epic cells at higher tiers
-    if game.scale_tier >= 2 and (len of game.epic_cells) < 1:
-        cx is rand_range_f of [0, game.world_w]
-        cy is rand_range_f of [0, game.world_h]
-        epic is new_epic_cell of [cx, cy, EPIC_PATROL_RADIUS]
-        epic.spec.palette is random_int of [0, 4]
-        epic.spec.body_segments is 5
-        epic.spec.body_shape is SHAPE_SHELL
-        append of [game.epic_cells, epic]
+    # Epic cells are (re)spawned by update_epic_cells each tick based on the
+    # new tier, so no explicit spawn here.
 
 # ============================================================
 # Core simulation tick
@@ -731,12 +729,16 @@ define game_tick(game) as:
     if game.game_over == 1:
         return game
 
-    # Scale tier progression — one tier per 10 food eaten
-    if game.scale_tier < SCALE_TIER_COUNT - 1:
-        if game.food_eaten >= (game.scale_tier + 1) * 10:
-            game.scale_tier is game.scale_tier + 1
-            game.event_tier_up is 1
-            game.message is ""
+    # Evolve eligibility — eating enough food UNLOCKS the next tier; it no
+    # longer auto-advances. Evolving is a deliberate ACTION_EVOLVE (player key
+    # E or a policy action) that runs evolve_tier_up. This is the one canonical
+    # progression gate.
+    if game.scale_tier < SCALE_TIER_COUNT - 1 and game.food_eaten >= (game.scale_tier + 1) * FOOD_PER_TIER:
+        if game.evolve_ready == 0:
+            game.message is "Evolution ready — press E to evolve."
+        game.evolve_ready is 1
+    else:
+        game.evolve_ready is 0
 
     # Update mate approach
     update_mate of game

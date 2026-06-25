@@ -7,9 +7,10 @@ load_file of "src/game.eigs"
 print of "=== Tidepool regressions ==="
 
 # ------------------------------------------------------------
-# Tier progression — bump exactly once per 10 food eaten.
-# Old bug: the check fired every tick while food_eaten % 10 == 0,
-# rocketing scale_tier to SCALE_TIER_COUNT - 1 within a few frames.
+# Tier progression — eating enough food UNLOCKS evolve (game.evolve_ready);
+# the tier only advances on a deliberate ACTION_EVOLVE. Food no longer
+# auto-advances the tier (that path was removed — it short-circuited the
+# rich evolve and made the AI and human play different games).
 # ------------------------------------------------------------
 game is new_game of [60.0, 20.0, 42]
 
@@ -21,17 +22,34 @@ for i in range of (len of game.predators):
 
 game.food_eaten is 10
 assert of [game.scale_tier == 0, "tier starts at 0"]
+assert of [game.evolve_ready == 0, "not eligible before a tick recomputes it"]
 
+# Eating to the threshold makes evolve available but does NOT advance the tier.
 game_tick of game
-assert of [game.scale_tier == 1, "tier bumps to 1 after first tick at food_eaten=10"]
+assert of [game.evolve_ready == 1, "evolve unlocked at food_eaten=10"]
+assert of [game.scale_tier == 0, "tier does NOT auto-advance from food alone"]
 
 for i in range of 10:
     game_tick of game
-assert of [game.scale_tier == 1, "tier stays at 1 while food_eaten stays at 10"]
+assert of [game.scale_tier == 0, "tier stays at 0 without an evolve action"]
+assert of [game.evolve_ready == 1, "stays eligible while not yet evolved"]
 
+# The deliberate evolve action consumes eligibility and advances one tier.
+game_action of [game, ACTION_EVOLVE]
+assert of [game.scale_tier == 1, "ACTION_EVOLVE advances to tier 1"]
+assert of [game.evolve_ready == 0, "eligibility consumed by evolving"]
+
+# Re-eligible only after crossing the next threshold (20), and one evolve
+# advances exactly one tier (no rocketing).
 game.food_eaten is 20
 game_tick of game
-assert of [game.scale_tier == 2, "tier bumps to 2 when food_eaten crosses 20"]
+assert of [game.evolve_ready == 1, "evolve unlocked again at food_eaten=20"]
+game_action of [game, ACTION_EVOLVE]
+assert of [game.scale_tier == 2, "second evolve advances to tier 2"]
+
+# Evolving when not eligible is a no-op.
+game_action of [game, ACTION_EVOLVE]
+assert of [game.scale_tier == 2, "evolve with no eligibility does nothing"]
 
 print of "  tier progression: ok"
 

@@ -15,6 +15,10 @@ MAX_MEAT is 48
 MAX_SPECIES is 8
 MAX_EPIC_CELLS is 2
 SCALE_TIER_COUNT is 5
+# Cumulative food eaten to unlock the next evolve (tier T->T+1 unlocks at
+# (T+1)*FOOD_PER_TIER). Eating reaches eligibility; evolving is a deliberate
+# action (ACTION_EVOLVE), not automatic.
+FOOD_PER_TIER is 10
 
 # Growth — mass increases as the cell eats, driving size (creature_radius)
 # and combat strength (creature_collision_power). This is the eat->grow->
