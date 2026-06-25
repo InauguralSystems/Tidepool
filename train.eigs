@@ -23,7 +23,7 @@ define parse_train_args() as:
         "epsilon_start": 1.0,
         "epsilon_end": 0.05,
         "epsilon_decay": 0.9995,
-        "batch_size": 8,
+        "batch_size": 32,
         "buffer_size": 5000,
         "target_update": 100,
         "tick_limit": 1000,
@@ -538,14 +538,19 @@ for ep in range of hp.episodes:
         ep_length is ep_length + 1
         step_count is step_count + 1
 
-        # Train every 4 steps (interpreted EigenScript is slower than C)
+        # Train every step. The earlier every-4th-step throttle (a perf hedge
+        # for interpreted EigenScript) starved the network of updates and is a
+        # prime suspect for the flat learning curve; a denser update schedule
+        # plus the larger batch (32) gives a far stronger, less noisy gradient.
+        # Trade-off: wall-clock per episode rises substantially (4x more
+        # train_step calls, each over a 4x-larger batch) — lower --batch or run
+        # fewer episodes if throughput matters on slow hardware.
         if buf.size >= hp.batch_size:
-            if step_count % 4 == 0:
-                step_out is train_step of [online, target_net, buf, hp]
-                if step_out[0] >= 0.0:
-                    loss_sum is loss_sum + step_out[0]
-                    q_sum is q_sum + step_out[1]
-                    train_step_count is train_step_count + 1
+            step_out is train_step of [online, target_net, buf, hp]
+            if step_out[0] >= 0.0:
+                loss_sum is loss_sum + step_out[0]
+                q_sum is q_sum + step_out[1]
+                train_step_count is train_step_count + 1
 
         # Update target network periodically
         if step_count % hp.target_update == 0:
