@@ -190,6 +190,42 @@ define segment_position(seg, cx, cy, spacing, fx, fy, spine_bend) as:
 # tick      — animation tick counter
 # spikes_lvl — mutation spike level (0 for NPCs)
 
+# One translucent, lit-from-within cell blob — the building block of the
+# bioluminescent look. Layers (renderer has alpha blending on): a soft outer
+# bloom, a translucent membrane, an inner glow, a bright nucleus, and an
+# upper-left sheen. Replaces the old flat circle + dark core (which read as a
+# solid ball). Overlapping segments stack their low-alpha blooms into one
+# cohesive glow.
+define draw_cell_blob(cx, cy, r, pal, pulse) as:
+    rr is clamp of [r, 3, 60]
+    # Translucent membrane body. No per-segment bloom — the creature-wide
+    # glow (draw_body_glow) provides the halo, so segments melt together
+    # instead of each carrying its own ring.
+    draw_circle of [cx, cy, rr, pal.otr, pal.otg, pal.otb, 175]
+    # Lit-from-within inner glow — breathes with the pulse
+    ig_a is 95 + floor of (pulse * 55)
+    draw_circle of [cx, cy, floor of (rr * 0.6), pal.ar, pal.ag, pal.ab, ig_a]
+    # Bright nucleus — brightness pulses
+    nr is clamp of [floor of (rr * 0.3), 2, rr]
+    nuc_a is 175 + floor of (pulse * 70)
+    if nuc_a > 255:
+        nuc_a is 255
+    draw_circle of [cx, cy, nr, pal.er, pal.eg, pal.eb, nuc_a]
+    # Membrane sheen (upper-left specular)
+    hr is clamp of [floor of (rr * 0.38), 2, rr]
+    draw_circle of [cx - floor of (rr * 0.33), cy - floor of (rr * 0.33), hr, 255, 255, 255, 55]
+
+# One soft halo behind the whole creature so its segments read as a single
+# cohesive cell. Smooth radial falloff via stacked low-alpha circles (in the
+# muted outer-body colour so it fades into the background instead of ringing);
+# the inner accent layer pulses so the cell glows like it's alive.
+define draw_body_glow(cx, cy, r, pal, pulse) as:
+    draw_circle of [cx, cy, floor of (r * 1.5), pal.otr, pal.otg, pal.otb, 9]
+    draw_circle of [cx, cy, floor of (r * 1.15), pal.otr, pal.otg, pal.otb, 13]
+    draw_circle of [cx, cy, floor of (r * 0.85), pal.otr, pal.otg, pal.otb, 17]
+    core_a is 14 + floor of (pulse * 16)
+    draw_circle of [cx, cy, floor of (r * 0.6), pal.ar, pal.ag, pal.ab, core_a]
+
 define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
     # Get palette colors
     pal is get_palette of spec.palette
@@ -205,6 +241,16 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
     if max_sockets > CREATURE_MAX_SOCKETS:
         max_sockets is CREATURE_MAX_SOCKETS
 
+    # Gentle "breathing" pulse (0..1), shared by the body glow and each blob.
+    pulse is (sin of (tick * 0.08)) * 0.5 + 0.5
+
+    # Unifying glow behind the whole body so segments read as one cell.
+    body_len is (seg_count - 1) * seg_spacing
+    gcx is sx - floor of (fx * body_len * 0.5)
+    gcy is sy - floor of (fy * body_len * 0.5)
+    glow_r is radius + floor of (body_len * 0.5)
+    draw_body_glow of [gcx, gcy, glow_r, pal, pulse]
+
     # Draw body segments back-to-front (tail first)
     i is seg_count - 1
     loop while i >= 0:
@@ -216,27 +262,20 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
         scx is seg_pos[0] + floor of wobble
         scy is seg_pos[1]
 
-        # Body shape variation
+        # Body shape variation — each piece is a lit-from-within blob.
         if spec.body_shape == SHAPE_WIDE:
-            # Wide: offset two overlapping circles laterally
-            draw_circle of [scx - 2, scy, sr, pal.otr, pal.otg, pal.otb]
-            draw_circle of [scx + 2, scy, sr, pal.otr, pal.otg, pal.otb]
+            draw_cell_blob of [scx - 2, scy, sr, pal, pulse]
+            draw_cell_blob of [scx + 2, scy, sr, pal, pulse]
         elif spec.body_shape == SHAPE_TALL:
-            # Tall: offset two overlapping circles vertically
-            draw_circle of [scx, scy - 2, sr, pal.otr, pal.otg, pal.otb]
-            draw_circle of [scx, scy + 2, sr, pal.otr, pal.otg, pal.otb]
+            draw_cell_blob of [scx, scy - 2, sr, pal, pulse]
+            draw_cell_blob of [scx, scy + 2, sr, pal, pulse]
         elif spec.body_shape == SHAPE_SHELL:
-            # Shell: outer + inner accent ring
-            draw_circle of [scx, scy, sr + 1, pal.otr, pal.otg, pal.otb]
+            draw_cell_blob of [scx, scy, sr + 1, pal, pulse]
             if sr > 4:
-                draw_circle of [scx, scy, clamp of [sr - 3, 3, sr], pal.ar, pal.ag, pal.ab]
+                # faint inner accent ring for the shell look
+                draw_circle of [scx, scy, clamp of [sr - 3, 3, sr], pal.ar, pal.ag, pal.ab, 90]
         else:
-            # Orb: simple circle
-            draw_circle of [scx, scy, sr, pal.otr, pal.otg, pal.otb]
-
-        # Inner dark core on each segment
-        core_r is clamp of [floor of (sr / 2), 2, 10]
-        draw_circle of [scx, scy, core_r, pal.ir, pal.ig, pal.ib]
+            draw_cell_blob of [scx, scy, sr, pal, pulse]
 
         i is i - 1
 
