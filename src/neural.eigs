@@ -35,24 +35,24 @@ POLICY_PATH is "models/policy.txt"
 # Weight initialization
 # ============================================================
 
+# Weights and biases are shaped flat buffers (row-major). matmul/add/relu compute
+# on the flat double[] directly (no nested-list flatten), so the forward pass —
+# in BOTH the trainer's batch backprop and single-step inference — takes the fast
+# path. Random-fill order is unchanged (r outer, c inner) so a seeded init is
+# byte-identical to the old nested-list version.
 define xavier_init(fan_in, fan_out) as:
     limit is sqrt of (6.0 / (fan_in + fan_out))
     rows is fan_in
     cols is fan_out
-    w is []
+    w is buffer of [rows, cols]
     for r in range of rows:
-        row is []
         for c in range of cols:
             val is (random of null) * 2.0 * limit - limit
-            append of [row, val]
-        append of [w, row]
+            w[r * cols + c] is val
     return w
 
 define zeros_1d(n) as:
-    result is []
-    for i in range of n:
-        append of [result, 0.0]
-    return result
+    return buffer of n
 
 # ============================================================
 # Flat-buffer inference policy (fast path)
@@ -85,6 +85,10 @@ define _vec_to_buffer(v) as:
 define policy_to_buffers(policy) as:
     if policy == null:
         return null
+    # Weights are already shaped buffers (new_policy / load_policy build them) —
+    # this is now a no-op, kept so the eval/game call sites stay valid.
+    if (type of policy.w1) == "buffer":
+        return policy
     return {
         "w1": _mat_to_buffer of policy.w1,
         "b1": _vec_to_buffer of policy.b1,
@@ -440,26 +444,20 @@ define build_stacked_observation(stack, game) as:
 # ============================================================
 
 define _flatten_weights(policy) as:
+    # Weights are row-major flat buffers, so this is a straight concat — the same
+    # element order as the old nested-list flatten, so models/policy.txt is
+    # format-compatible with files saved before the buffer migration.
     flat is []
-    # w1 (rows x cols)
-    for r in range of (len of policy.w1):
-        for c in range of (len of policy.w1[r]):
-            append of [flat, policy.w1[r][c]]
-    # b1
+    for i in range of (len of policy.w1):
+        append of [flat, policy.w1[i]]
     for i in range of (len of policy.b1):
         append of [flat, policy.b1[i]]
-    # w2
-    for r in range of (len of policy.w2):
-        for c in range of (len of policy.w2[r]):
-            append of [flat, policy.w2[r][c]]
-    # b2
+    for i in range of (len of policy.w2):
+        append of [flat, policy.w2[i]]
     for i in range of (len of policy.b2):
         append of [flat, policy.b2[i]]
-    # w3
-    for r in range of (len of policy.w3):
-        for c in range of (len of policy.w3[r]):
-            append of [flat, policy.w3[r][c]]
-    # b3
+    for i in range of (len of policy.w3):
+        append of [flat, policy.w3[i]]
     for i in range of (len of policy.b3):
         append of [flat, policy.b3[i]]
     return flat
@@ -484,30 +482,22 @@ define save_policy(policy) as:
 define _unflatten_weights(flat) as:
     policy is new_policy of null
     idx is 0
-    # w1: NEURAL_INPUT_SIZE x NEURAL_HIDDEN1
-    for r in range of NEURAL_INPUT_SIZE:
-        for c in range of NEURAL_HIDDEN1:
-            policy.w1[r][c] is flat[idx]
-            idx is idx + 1
-    # b1: NEURAL_HIDDEN1
+    # flat buffers, row-major — assign straight through
+    for i in range of (NEURAL_INPUT_SIZE * NEURAL_HIDDEN1):
+        policy.w1[i] is flat[idx]
+        idx is idx + 1
     for i in range of NEURAL_HIDDEN1:
         policy.b1[i] is flat[idx]
         idx is idx + 1
-    # w2: NEURAL_HIDDEN1 x NEURAL_HIDDEN2
-    for r in range of NEURAL_HIDDEN1:
-        for c in range of NEURAL_HIDDEN2:
-            policy.w2[r][c] is flat[idx]
-            idx is idx + 1
-    # b2: NEURAL_HIDDEN2
+    for i in range of (NEURAL_HIDDEN1 * NEURAL_HIDDEN2):
+        policy.w2[i] is flat[idx]
+        idx is idx + 1
     for i in range of NEURAL_HIDDEN2:
         policy.b2[i] is flat[idx]
         idx is idx + 1
-    # w3: NEURAL_HIDDEN2 x NEURAL_ACTIONS
-    for r in range of NEURAL_HIDDEN2:
-        for c in range of NEURAL_ACTIONS:
-            policy.w3[r][c] is flat[idx]
-            idx is idx + 1
-    # b3: NEURAL_ACTIONS
+    for i in range of (NEURAL_HIDDEN2 * NEURAL_ACTIONS):
+        policy.w3[i] is flat[idx]
+        idx is idx + 1
     for i in range of NEURAL_ACTIONS:
         policy.b3[i] is flat[idx]
         idx is idx + 1

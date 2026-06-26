@@ -92,16 +92,41 @@ if hp.episodes > 1:
 # Transpose helper
 # ============================================================
 
+# Weights/activations are shaped flat buffers (row-major). transpose reads the
+# 2-D shape and swaps indices into a new buffer.
 define transpose(m) as:
-    rows is len of m
-    cols is len of m[0]
-    result is []
-    for c in range of cols:
-        row is []
-        for r in range of rows:
-            append of [row, m[r][c]]
-        append of [result, row]
+    sh is shape of m
+    rows is sh[0]
+    cols is sh[1]
+    result is buffer of [cols, rows]
+    for r in range of rows:
+        base is r * cols
+        for c in range of cols:
+            result[c * rows + r] is m[base + c]
     return result
+
+# Stack a list of 1-D obs buffers into one [batch x cols] buffer so matmul takes
+# the flat fast path (it needs a single shaped buffer, not a list of vectors).
+define stack_obs(obs_list) as:
+    bs is len of obs_list
+    cols is len of obs_list[0]
+    m is buffer of [bs, cols]
+    for r in range of bs:
+        row is obs_list[r]
+        base is r * cols
+        for c in range of cols:
+            m[base + c] is row[c]
+    return m
+
+# z[r,c] = pre[r,c] + bias[c] — broadcast a 1-D bias over batch rows. The VM
+# guards every '+', so this matches the `add` builtin's num_guard byte-for-byte.
+define add_bias(pre, bias, rows, cols) as:
+    out is buffer of [rows, cols]
+    for r in range of rows:
+        base is r * cols
+        for c in range of cols:
+            out[base + c] is pre[base + c] + bias[c]
+    return out
 
 # ============================================================
 # Replay buffer (circular)
@@ -155,14 +180,16 @@ define buffer_sample(buf, batch_size) as:
 # ============================================================
 
 define forward_cached(policy, obs_batch) as:
-    # obs_batch: list of observation vectors
-    # Returns [q_values, cache]
-    z1 is add of [(matmul of [obs_batch, policy.w1]), policy.b1]
+    # obs_batch: list of 1-D obs buffers -> a [bs x input] buffer, then the
+    # forward runs all-buffer (matmul/relu fast path, add_bias broadcast).
+    x is stack_obs of obs_batch
+    bs is len of obs_batch
+    z1 is add_bias of [(matmul of [x, policy.w1]), policy.b1, bs, NEURAL_HIDDEN1]
     a1 is relu of z1
-    z2 is add of [(matmul of [a1, policy.w2]), policy.b2]
+    z2 is add_bias of [(matmul of [a1, policy.w2]), policy.b2, bs, NEURAL_HIDDEN2]
     a2 is relu of z2
-    q is add of [(matmul of [a2, policy.w3]), policy.b3]
-    return [q, [obs_batch, z1, a1, z2, a2]]
+    q is add_bias of [(matmul of [a2, policy.w3]), policy.b3, bs, NEURAL_ACTIONS]
+    return [q, [x, z1, a1, z2, a2]]
 
 # ============================================================
 # Backpropagation — compute gradients and update weights
@@ -196,18 +223,19 @@ define train_step(online, target, buf, hp) as:
 
     # Compute TD targets and error gradient
     bs is hp.batch_size
-    dq is zeros of [bs, NEURAL_ACTIONS]
+    dq is buffer of [bs, NEURAL_ACTIONS]
     loss is 0.0
     total_max_q is 0.0
 
     for i in range of bs:
+        ib is i * NEURAL_ACTIONS
         # Double-DQN value of next state: argmax over the ONLINE net, value
         # read from the TARGET net at that action.
         a_star is 0
         for a in range of NEURAL_ACTIONS:
-            if q_next_online[i][a] > q_next_online[i][a_star]:
+            if q_next_online[ib + a] > q_next_online[ib + a_star]:
                 a_star is a
-        next_q is q_next_target[i][a_star]
+        next_q is q_next_target[ib + a_star]
         total_max_q is total_max_q + next_q
 
         # TD target
@@ -215,7 +243,7 @@ define train_step(online, target, buf, hp) as:
 
         # TD error for taken action
         a_taken is actions[i]
-        td_err is q_all[i][a_taken] - td_target
+        td_err is q_all[ib + a_taken] - td_target
 
         # Huber loss (delta = 1): quadratic for |err| <= 1, linear beyond, so
         # large TD errors can't dominate the gradient. The gradient is the TD
@@ -226,13 +254,13 @@ define train_step(online, target, buf, hp) as:
             abs_err is 0.0 - abs_err
         if abs_err <= 1.0:
             loss is loss + 0.5 * td_err * td_err
-            dq[i][a_taken] is (2.0 / bs) * td_err
+            dq[ib + a_taken] is (2.0 / bs) * td_err
         else:
             loss is loss + (abs_err - 0.5)
             grad is 1.0
             if td_err < 0.0:
                 grad is -1.0
-            dq[i][a_taken] is (2.0 / bs) * grad
+            dq[ib + a_taken] is (2.0 / bs) * grad
 
     loss is loss / bs
 
@@ -254,18 +282,17 @@ define train_step(online, target, buf, hp) as:
     for c in range of NEURAL_ACTIONS:
         s is 0.0
         for r in range of bs:
-            s is s + dq[r][c]
+            s is s + dq[r * NEURAL_ACTIONS + c]
         append of [db3, s]
     da2 is matmul of [dq, w3t]
 
     # ReLU backward for layer 2: pass da2 through where z2 > 0, else 0.
-    # (Allocate the result shape with zeros; the loop below fills every cell,
-    # so there's no need to compute relu(z2) and an elementwise multiply first.)
-    dz2 is zeros of [bs, NEURAL_HIDDEN2]
+    dz2 is buffer of [bs, NEURAL_HIDDEN2]
     for i in range of bs:
+        ib is i * NEURAL_HIDDEN2
         for j in range of NEURAL_HIDDEN2:
-            if z2[i][j] > 0:
-                dz2[i][j] is da2[i][j]
+            if z2[ib + j] > 0:
+                dz2[ib + j] is da2[ib + j]
 
     # Layer 2: a1 -> z2
     a1t is transpose of a1
@@ -274,15 +301,16 @@ define train_step(online, target, buf, hp) as:
     for c in range of NEURAL_HIDDEN2:
         s is 0.0
         for r in range of bs:
-            s is s + dz2[r][c]
+            s is s + dz2[r * NEURAL_HIDDEN2 + c]
         append of [db2, s]
     da1 is matmul of [dz2, w2t]
 
     # ReLU backward for layer 1
     for i in range of bs:
+        ib is i * NEURAL_HIDDEN1
         for j in range of NEURAL_HIDDEN1:
-            if z1[i][j] <= 0:
-                da1[i][j] is 0.0
+            if z1[ib + j] <= 0:
+                da1[ib + j] is 0.0
 
     # Layer 1: x -> z1
     xt is transpose of x
@@ -291,7 +319,7 @@ define train_step(online, target, buf, hp) as:
     for c in range of NEURAL_HIDDEN1:
         s is 0.0
         for r in range of bs:
-            s is s + da1[r][c]
+            s is s + da1[r * NEURAL_HIDDEN1 + c]
         append of [db1, s]
 
     # SGD update with gradient clipping
@@ -300,13 +328,14 @@ define train_step(online, target, buf, hp) as:
     # Update w1 — iterate full NEURAL_INPUT_SIZE rows (w1 has stacked-frame + aux rows,
     # not just one obs-frame's worth)
     for r in range of NEURAL_INPUT_SIZE:
+        rb is r * NEURAL_HIDDEN1
         for c in range of NEURAL_HIDDEN1:
-            g is dw1[r][c]
+            g is dw1[rb + c]
             if g > 1.0:
                 g is 1.0
             elif g < -1.0:
                 g is -1.0
-            online.w1[r][c] is online.w1[r][c] - lr * g
+            online.w1[rb + c] is online.w1[rb + c] - lr * g
     # Update b1
     for i in range of NEURAL_HIDDEN1:
         g is db1[i]
@@ -318,13 +347,14 @@ define train_step(online, target, buf, hp) as:
 
     # Update w2
     for r in range of NEURAL_HIDDEN1:
+        rb is r * NEURAL_HIDDEN2
         for c in range of NEURAL_HIDDEN2:
-            g is dw2[r][c]
+            g is dw2[rb + c]
             if g > 1.0:
                 g is 1.0
             elif g < -1.0:
                 g is -1.0
-            online.w2[r][c] is online.w2[r][c] - lr * g
+            online.w2[rb + c] is online.w2[rb + c] - lr * g
     # Update b2
     for i in range of NEURAL_HIDDEN2:
         g is db2[i]
@@ -336,13 +366,14 @@ define train_step(online, target, buf, hp) as:
 
     # Update w3
     for r in range of NEURAL_HIDDEN2:
+        rb is r * NEURAL_ACTIONS
         for c in range of NEURAL_ACTIONS:
-            g is dw3[r][c]
+            g is dw3[rb + c]
             if g > 1.0:
                 g is 1.0
             elif g < -1.0:
                 g is -1.0
-            online.w3[r][c] is online.w3[r][c] - lr * g
+            online.w3[rb + c] is online.w3[rb + c] - lr * g
     # Update b3
     for i in range of NEURAL_ACTIONS:
         g is db3[i]
@@ -359,19 +390,16 @@ define train_step(online, target, buf, hp) as:
 # ============================================================
 
 define copy_weights(src, dst) as:
-    for r in range of (len of src.w1):
-        for c in range of (len of src.w1[r]):
-            dst.w1[r][c] is src.w1[r][c]
+    for i in range of (len of src.w1):
+        dst.w1[i] is src.w1[i]
     for i in range of (len of src.b1):
         dst.b1[i] is src.b1[i]
-    for r in range of (len of src.w2):
-        for c in range of (len of src.w2[r]):
-            dst.w2[r][c] is src.w2[r][c]
+    for i in range of (len of src.w2):
+        dst.w2[i] is src.w2[i]
     for i in range of (len of src.b2):
         dst.b2[i] is src.b2[i]
-    for r in range of (len of src.w3):
-        for c in range of (len of src.w3[r]):
-            dst.w3[r][c] is src.w3[r][c]
+    for i in range of (len of src.w3):
+        dst.w3[i] is src.w3[i]
     for i in range of (len of src.b3):
         dst.b3[i] is src.b3[i]
 
