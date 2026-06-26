@@ -55,6 +55,47 @@ define zeros_1d(n) as:
     return result
 
 # ============================================================
+# Flat-buffer inference policy (fast path)
+# ============================================================
+# The trainer backprops with 2-D nested-list weights (manual gradient math).
+# Inference (eval / the game) only needs the forward pass, which runs ~11x
+# faster on the VM (and far faster AOT-compiled) when the weights and obs are
+# shaped flat buffers — EigenScript's matmul/add/relu compute on those directly
+# with no per-call nested-list flatten. `policy_to_buffers` converts a loaded
+# nested-list policy ONCE at load; `policy_decide` feeds it a buffer obs. The
+# math is byte-identical (same ne_matmul_buf), so actions/scores are unchanged.
+
+define _mat_to_buffer(m) as:
+    rows is len of m
+    cols is len of m[0]
+    b is buffer of [rows, cols]
+    for r in range of rows:
+        row is m[r]
+        for c in range of cols:
+            b[r * cols + c] is row[c]
+    return b
+
+define _vec_to_buffer(v) as:
+    n is len of v
+    b is buffer of n
+    for i in range of n:
+        b[i] is v[i]
+    return b
+
+define policy_to_buffers(policy) as:
+    if policy == null:
+        return null
+    return {
+        "w1": _mat_to_buffer of policy.w1,
+        "b1": _vec_to_buffer of policy.b1,
+        "w2": _mat_to_buffer of policy.w2,
+        "b2": _vec_to_buffer of policy.b2,
+        "w3": _mat_to_buffer of policy.w3,
+        "b3": _vec_to_buffer of policy.b3,
+        "loaded": policy.loaded
+    }
+
+# ============================================================
 # Policy constructor
 # ============================================================
 
@@ -87,7 +128,10 @@ define argmax(lst) as:
     return best
 
 define policy_decide(policy, obs, game) as:
-    q is policy_forward of [policy, obs]
+    # Inference path: `policy` is buffer-backed (policy_to_buffers); run the
+    # forward on a buffer obs so matmul/add/relu take the flat fast path.
+    obs_b is _vec_to_buffer of obs
+    q is policy_forward of [policy, obs_b]
     action is argmax of q
     # action: 0=nothing 1=thrust 2=turn_left 3=turn_right 4=brake 5=evolve
     game.thrusting is 0

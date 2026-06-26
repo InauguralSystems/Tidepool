@@ -154,7 +154,7 @@ print_row of r_rand
 r_auto is eval_agent of ["autopilot", null, seeds, cfg.world_w, cfg.world_h, cfg.ticks]
 print_row of r_auto
 
-policy is load_policy of null
+policy is policy_to_buffers of (load_policy of null)
 if policy == null:
     print of "trained   | (no models/policy.txt found — train first)"
 else:
