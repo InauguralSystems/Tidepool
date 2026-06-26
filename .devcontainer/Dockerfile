@@ -21,12 +21,16 @@ RUN apt-get update \
         python3-pil \
  && rm -rf /var/lib/apt/lists/*
 
-# Full EigenScript source at the pinned tag; build the gfx variant. SDL2 is
+# Full EigenScript source at a pinned ref; build the gfx variant. SDL2 is
 # dlopen'd at runtime, so building gfx needs no -dev headers — only libsdl2 to
 # *run* it. eigenscript resolves its stdlib relative to the binary (../lib).
-ARG EIGS_REF=v0.18.0
-RUN git clone --depth 1 --branch "${EIGS_REF}" \
-        https://github.com/InauguralSystems/EigenScript.git /opt/eigenscript \
+# EIGS_REF is a commit SHA (fetched directly, so an immutable SHA stays
+# reproducible). Pinned past v0.18.0 to the flat-buffer tensors (#275 — shaped
+# VAL_BUFFER), which the neural policy's buffer inference path requires.
+ARG EIGS_REF=098b2bf8ef5549fb3c5f7214f4ea1064e176b17f
+RUN mkdir -p /opt/eigenscript && cd /opt/eigenscript && git init -q \
+ && git remote add origin https://github.com/InauguralSystems/EigenScript.git \
+ && git fetch -q --depth 1 origin "${EIGS_REF}" && git checkout -q FETCH_HEAD \
  && make -C /opt/eigenscript gfx CC=gcc
 
 ENV EIGS_DIR=/opt/eigenscript

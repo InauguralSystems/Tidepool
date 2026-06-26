@@ -151,7 +151,7 @@ watch_mode is 0
 watch_diet is 0
 obs_stack is new_observation_stack of null
 demo_log is new_demo_log of null
-neural is load_policy of null
+neural is policy_to_buffers of (load_policy of null)
 if neural != null:
     print of "Neural policy loaded"
 
@@ -985,7 +985,7 @@ loop while running == 1:
                     toast_text is f"Training: {result}"
                     toast_timer is 120
                     # Reload policy if training succeeded
-                    reloaded is load_policy of null
+                    reloaded is policy_to_buffers of (load_policy of null)
                     if reloaded != null:
                         neural is reloaded
                         toast_text is "New policy promoted!"
