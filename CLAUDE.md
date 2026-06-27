@@ -48,10 +48,10 @@ EigenScript is **not** vendored in this repo. You need its interpreter
 binary. To build it from source:
 
 ```bash
-# Pin matches .devcontainer/Dockerfile (EIGS_REF); needs the shaped VAL_BUFFER
-# feature (PR #275, post-v0.18.0) that the neural policy's buffers depend on.
-git clone https://github.com/InauguralSystems/EigenScript.git
-cd EigenScript && git checkout 098b2bf8ef5549fb3c5f7214f4ea1064e176b17f
+# v0.19.0 ships the shaped VAL_BUFFER feature (#275) the neural policy's buffers
+# depend on; matches .devcontainer/Dockerfile's EIGS_REF.
+git clone --branch v0.19.0 https://github.com/InauguralSystems/EigenScript.git
+cd EigenScript
 make build      # headless binary -> src/eigenscript  (no SDL2 needed)
 make gfx        # graphical binary (requires libsdl2-dev) for the playable game
 ```
@@ -62,10 +62,10 @@ make gfx        # graphical binary (requires libsdl2-dev) for the playable game
   `tidepool.eigs` itself and `test_frametime.eigs` (they call `gfx_*`).
 - Minimum language version for current features is **v0.13.0** (uses
   multi-arg `spawn`, `recv_timeout`, `audio_play_loop`); background music
-  needs `audio_music_*` (EigenScript 0.18.0). **Current pin: EigenScript main
-  @ #275** (shaped `VAL_BUFFER`) — the neural policy stores its weights/obs as
-  flat shaped buffers (`buffer of [r, c]`), so it requires #275, which is
-  post-v0.18.0. The forward is ~7× faster than the old nested-list form and the
+  needs `audio_music_*` (EigenScript 0.18.0). **Current pin: EigenScript
+  v0.19.0** (shaped `VAL_BUFFER`, #275) — the neural policy stores its
+  weights/obs as flat shaped buffers (`buffer of [r, c]`), so it requires
+  v0.19.0. The forward is ~7× faster than the old nested-list form and the
   trainer's backprop ~1.8×, both byte-identical; `models/policy.txt` stays
   format-compatible. Validated headless (regressions, obs-stacking, game_tick,
   train pipeline).
