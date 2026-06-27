@@ -48,8 +48,10 @@ EigenScript is **not** vendored in this repo. You need its interpreter
 binary. To build it from source:
 
 ```bash
-git clone --branch v0.18.0 https://github.com/InauguralSystems/EigenScript.git
-cd EigenScript
+# Pin matches .devcontainer/Dockerfile (EIGS_REF); needs the shaped VAL_BUFFER
+# feature (PR #275, post-v0.18.0) that the neural policy's buffers depend on.
+git clone https://github.com/InauguralSystems/EigenScript.git
+cd EigenScript && git checkout 098b2bf8ef5549fb3c5f7214f4ea1064e176b17f
 make build      # headless binary -> src/eigenscript  (no SDL2 needed)
 make gfx        # graphical binary (requires libsdl2-dev) for the playable game
 ```
@@ -60,10 +62,13 @@ make gfx        # graphical binary (requires libsdl2-dev) for the playable game
   `tidepool.eigs` itself and `test_frametime.eigs` (they call `gfx_*`).
 - Minimum language version for current features is **v0.13.0** (uses
   multi-arg `spawn`, `recv_timeout`, `audio_play_loop`); background music
-  needs `audio_music_*` (EigenScript 0.18.0); **v0.18.0 is the
-  current tested release** (validated headless: regressions, obs-stacking,
-  game_tick, and the train pipeline all pass; `game_tick` ~86 ms vs ~100 ms
-  on 0.16.3).
+  needs `audio_music_*` (EigenScript 0.18.0). **Current pin: EigenScript main
+  @ #275** (shaped `VAL_BUFFER`) — the neural policy stores its weights/obs as
+  flat shaped buffers (`buffer of [r, c]`), so it requires #275, which is
+  post-v0.18.0. The forward is ~7× faster than the old nested-list form and the
+  trainer's backprop ~1.8×, both byte-identical; `models/policy.txt` stays
+  format-compatible. Validated headless (regressions, obs-stacking, game_tick,
+  train pipeline).
 
 Run a script:
 
@@ -161,7 +166,10 @@ Load order matters: `game.eigs` loads `constants`, `math_utils`,
   (`game.evolve_ready`), so the policy can perceive when evolving is
   available and learn to time it. Movement + the evolve decision are
   learned; **mutation-buying stays auto-piloted** (`autopilot_buy_mutation`
-  is still called for the policy each step).
+  is still called for the policy each step). **Weights/obs are shaped flat
+  buffers** (`buffer of [r, c]`), so matmul/add/relu run on the flat `double[]`
+  with no per-call nested-list flatten (requires EigenScript #275); the forward
+  source is unchanged, byte-identical to the old nested-list form.
 - **DQN trainer** (`train.eigs`): epsilon-greedy with an *adaptive*
   schedule (anneals start→end over ~60% of the run so the greedy policy
   is actually exploited), target network, circular replay buffer, manual
