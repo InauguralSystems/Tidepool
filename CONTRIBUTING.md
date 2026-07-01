@@ -4,6 +4,14 @@ Thanks for your interest. Tidepool is a Spore-style cell-stage game written
 entirely in [EigenScript](https://github.com/InauguralSystems/EigenScript),
 and it doubles as a real-world stress test for that language.
 
+## Good first issues
+
+Looking for a place to start? Issues labelled
+[**good first issue**](https://github.com/InauguralSystems/Tidepool/labels/good%20first%20issue)
+(also collected on the [contribute page](https://github.com/InauguralSystems/Tidepool/contribute))
+are small and self-contained, each with the exact file and line, the change to
+make, and acceptance criteria. Comment on one to claim it before opening a PR.
+
 ## Setup
 
 EigenScript is not vendored here. Check it out alongside this repo and the

@@ -99,6 +99,10 @@ is learning to evolve. See [CLAUDE.md](CLAUDE.md) for the full workflow.
 
 ## Contributing
 
+New here? The [**good first issues**](https://github.com/InauguralSystems/Tidepool/contribute)
+are small, self-contained tasks with the exact file, the fix, and acceptance
+criteria spelled out — a good place to start.
+
 Build and test with `make test` / `make lint`. The repo doubles as a real-world
 EigenScript stress test — language gaps found during development are tracked in
 [GAPS.md](GAPS.md) and driven upstream. See [CONTRIBUTING.md](CONTRIBUTING.md).
