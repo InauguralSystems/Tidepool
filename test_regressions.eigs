@@ -258,5 +258,34 @@ assert of [(draw_op_count of null) == 0, "record_begin starts a fresh draw-list"
 
 print of "  headless render (draw-list): ok"
 
+# ------------------------------------------------------------
+# Stunned combat — a predator that is stunned (e.g. hit by the electric part)
+# must NOT bite the player, even sitting on top of it. The bite branch was
+# gated only on invuln; now it also checks pred.stunned_timer.
+# ------------------------------------------------------------
+define stun_bite_loss(stun) as:
+    sg is new_game of [60.0, 20.0, 42]
+    for i in range of (len of sg.food):
+        sg.food[i].active is 0
+    for i in range of (len of sg.predators):
+        sg.predators[i].active is 0
+    # One big predator right on the player -> player is out-powered (bite path).
+    sp is sg.predators[0]
+    sp.active is 1
+    sp.size is 5
+    sp.hp is sp.size + 1
+    sp.radius is 0.5 + sp.size * 0.3
+    sp.px is sg.px
+    sp.py is sg.py
+    sp.stunned_timer is stun
+    sg.invuln_timer is 0
+    e0 is sg.energy
+    game_tick of sg
+    return e0 - sg.energy
+
+assert of [(stun_bite_loss of 0) > 0, "an un-stunned predator on the player bites"]
+assert of [(stun_bite_loss of 90) == 0, "a stunned predator does NOT bite the player"]
+print of "  stunned predator does not bite: ok"
+
 print of ""
 print of "=== All regressions passed ==="

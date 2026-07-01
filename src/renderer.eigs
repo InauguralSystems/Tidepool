@@ -410,9 +410,10 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
             pr is clamp of [floor of (er / 2), 1, 3]
             draw_circle of [px, py, pr, 18, 24, 28]
 
-    # Mouth
-    mx is sx + floor of (fx * radius * 0.7)
-    my is sy + floor of (fy * radius * 0.7)
+    # Mouth (local: `mx`/`my` are also module-global mouse coords in the game
+    # entry — shadow them here so a render never clobbers input state)
+    local mx is sx + floor of (fx * radius * 0.7)
+    local my is sy + floor of (fy * radius * 0.7)
     ms is clamp of [floor of (radius / 4), 3, 10]
     if spec.mouth_type == MOUTH_FILTER:
         # Baleen: three horizontal lines across the front
