@@ -6,35 +6,20 @@ All notable changes to Tidepool are documented here. The format is based on
 
 ## [Unreleased]
 
-### Added
-- **`--version` flag** (`eigenscript tidepool.eigs --version`) reports the
-  version from the `VERSION` file (the single source of truth) and exits.
+## [0.2.0] — 2026-07-01
 
-### Repository
-- Open-source readiness pass ahead of going public: added `CODE_OF_CONDUCT.md`,
-  issue/PR templates, `.github/dependabot.yml` (github-actions), an OpenSSF
-  Scorecard workflow, and an `assets/` license note; aligned the LICENSE
-  copyright to `InauguralSystems and contributors`; refreshed README badges and
-  the EigenScript version floor (v0.19.0+, CI pins v0.21.2).
-- **Release automation** (`.github/workflows/release.yml`): a tag push or the
-  dispatch path publishes a versioned source archive (`git archive`) with
-  `CHECKSUMS`, a Sigstore build-provenance attestation, and CHANGELOG-derived
-  notes; it verifies the tag matches `VERSION`. Release process documented in
-  CLAUDE.md.
-
-### Removed
-- **The in-game "background trainer" (`src/training.eigs`), which never
-  trained.** Its worker saved a demo log and reported `"done"` without any
-  gradient step, so watch mode showed a "training done / policy promoted" toast
-  while the policy was unchanged. Real training is the standalone `train.eigs`
-  (an off-box job); watch mode (Tab) still runs the loaded policy. Also drops
-  the orphaned demo-logging (nothing read `models/demo_log.txt`). Closes #12.
+First release since Tidepool went public. A full adversarial code review (five
+lenses; no blockers, DQN and physics verified correct) landed AI-hot-path
+performance dedups and correctness fixes; the fake in-game trainer was removed;
+and the repository was set up for open source with release automation.
 
 ### Added
 - **Looping background music** (`assets/music/tidepool_background.mp3`), played
   via EigenScript 0.18.0's new `audio_music_*` builtins on startup. Degrades
   gracefully (no music, no crash) on older runtimes or if the asset is missing.
   Requires EigenScript **v0.18.0+** and `libsdl2-mixer-2.0-0`. Closes GAP-007.
+- **`--version` flag** (`eigenscript tidepool.eigs --version`) reports the
+  version from the `VERSION` file (the single source of truth) and exits.
 
 ### Fixed
 - **Sim speed no longer tracks display refresh.** The main loop paced with a
@@ -54,6 +39,10 @@ All notable changes to Tidepool are documented here. The format is based on
   un-halved one, so `train_log.csv`'s loss column read at half the true scale
   (and `--lr` looked half as effective as it was). The logged value now matches
   the gradient; training trajectories are unchanged.
+- `spawn_meat` now always produces meat: when the fixed meat pool is full
+  (a burst of kills faster than meat expires) it recycles the
+  soonest-to-expire slot instead of silently dropping the chunk. Removes an
+  ignored success/fail return that five call sites discarded.
 - Hardened two latent scope-clobber sites (`_hit_test_btn`'s `result`,
   `draw_creature_body`'s `mx`/`my`) with `local` so a render/hit-test can never
   overwrite the module-global mouse/return state on a future refactor.
@@ -69,10 +58,25 @@ All notable changes to Tidepool are documented here. The format is based on
   `build_stacked_observation` already returns a buffer, so it's passed straight
   through.
 
-- `spawn_meat` now always produces meat: when the fixed meat pool is full
-  (a burst of kills faster than meat expires) it recycles the
-  soonest-to-expire slot instead of silently dropping the chunk. Removes an
-  ignored success/fail return that five call sites discarded.
+### Removed
+- **The in-game "background trainer" (`src/training.eigs`), which never
+  trained.** Its worker saved a demo log and reported `"done"` without any
+  gradient step, so watch mode showed a "training done / policy promoted" toast
+  while the policy was unchanged. Real training is the standalone `train.eigs`
+  (an off-box job); watch mode (Tab) still runs the loaded policy. Also drops
+  the orphaned demo-logging (nothing read `models/demo_log.txt`). Closes #12.
+
+### Repository
+- Open-source readiness pass: went public under MIT; added `CODE_OF_CONDUCT.md`,
+  issue/PR templates, `.github/dependabot.yml` (github-actions), an OpenSSF
+  Scorecard workflow, and an `assets/` license note; aligned the LICENSE
+  copyright to `InauguralSystems and contributors`; refreshed README badges and
+  the EigenScript version floor (v0.19.0+, CI pins v0.21.2).
+- **Release automation** (`.github/workflows/release.yml`): a tag push or the
+  dispatch path publishes a versioned source archive (`git archive`) with
+  `CHECKSUMS`, a Sigstore build-provenance attestation, and CHANGELOG-derived
+  notes; it verifies the tag matches `VERSION`. Release process documented in
+  CLAUDE.md.
 
 ## [0.1.0] — 2026-06-25
 
