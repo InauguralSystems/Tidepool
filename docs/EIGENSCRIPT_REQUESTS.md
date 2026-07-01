@@ -4,7 +4,11 @@ Things the game has surfaced that the language or stdlib doesn't
 currently handle well. Not bugs — gaps that show up once you try to
 do real-time work on constrained hardware.
 
-## 1. High-resolution monotonic timer builtin
+## 1. High-resolution monotonic timer builtin ✅ RESOLVED
+
+**Resolved**: `monotonic_ns of null` ships in EigenScript and is used by
+`test_game_tick.eigs`. (`test_frametime.eigs` still uses the old `date`
+shell-out below and could be migrated to it.)
 
 **Want**: `monotonic_ns of null` → integer nanoseconds from a
 monotonic source. Optionally `monotonic_ms`, `monotonic_us`.
