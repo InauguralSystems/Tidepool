@@ -658,7 +658,9 @@ define game_tick(game) as:
                     # not an instant kill. Recent-hit invulnerability prevents
                     # a predator from chewing through all your energy in a few
                     # adjacent ticks. Death only when energy runs out.
-                    if game.invuln_timer <= 0:
+                    # A stunned predator (e.g. hit by the electric part) can't
+                    # bite — that's the defensive payoff of the stun.
+                    if game.invuln_timer <= 0 and pred.stunned_timer <= 0:
                         gap is pred_power - zone_player_power
                         bite is 20 + gap * 8
                         if bite > 60:

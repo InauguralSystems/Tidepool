@@ -134,7 +134,11 @@ define argmax(lst) as:
 define policy_decide(policy, obs, game) as:
     # Inference path: `policy` is buffer-backed (policy_to_buffers); run the
     # forward on a buffer obs so matmul/add/relu take the flat fast path.
-    obs_b is _vec_to_buffer of obs
+    # build_stacked_observation already returns a buffer, so pass it straight
+    # through — only convert if a caller handed us a plain list.
+    obs_b is obs
+    if (type of obs) != "buffer":
+        obs_b is _vec_to_buffer of obs
     q is policy_forward of [policy, obs_b]
     action is argmax of q
     # action: 0=nothing 1=thrust 2=turn_left 3=turn_right 4=brake 5=evolve

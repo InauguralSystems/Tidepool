@@ -762,7 +762,7 @@ define _hit_test_btn(widget, ox, oy, mx, my, btn_id) as:
         return 0
     if widget.type == "panel" or widget.type == "hbox" or widget.type == "vbox":
         for i in range of (len of widget.children):
-            result is _hit_test_btn of [widget.children[i], ax, ay, mx, my, btn_id]
+            local result is _hit_test_btn of [widget.children[i], ax, ay, mx, my, btn_id]
             if result == 1:
                 return 1
     return 0
@@ -770,6 +770,13 @@ define _hit_test_btn(widget, ox, oy, mx, my, btn_id) as:
 # ============================================================
 # Main game loop
 # ============================================================
+
+# Frame pacing state. game_tick advances a fixed SIM_DT (1/60 s), so the loop
+# must run at ~60 Hz of WALL-CLOCK time or the sim speed tracks the display's
+# refresh rate — too fast on a high-refresh panel (or with vsync disabled),
+# variable on slow frames. We sleep the remainder of each frame's budget below.
+FRAME_MS is 1000.0 / 60.0
+frame_next is gfx_ticks of null
 
 loop while running == 1:
     # Process all pending events
@@ -1069,8 +1076,16 @@ loop while running == 1:
             ui.render of [gameover_overlay, 0, 0]
             gfx_present of null
 
-    # Frame timing
-    gfx_delay of 1
+    # Frame pacing — sleep the remainder of this frame's 1/60 s budget so the
+    # sim advances at wall-clock 60 Hz, independent of vsync/display refresh.
+    frame_next is frame_next + FRAME_MS
+    frame_wait is frame_next - (gfx_ticks of null)
+    if frame_wait >= 1.0:
+        gfx_delay of (floor of frame_wait)
+    elif frame_wait < (0.0 - FRAME_MS):
+        # Fell far behind (a slow frame or stall) — resync so we don't then run
+        # a burst of zero-delay frames that race the sim forward to catch up.
+        frame_next is gfx_ticks of null
 
 audio_game_shutdown of null
 gfx_close of null

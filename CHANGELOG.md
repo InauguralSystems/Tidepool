@@ -13,6 +13,38 @@ All notable changes to Tidepool are documented here. The format is based on
   Requires EigenScript **v0.18.0+** and `libsdl2-mixer-2.0-0`. Closes GAP-007.
 
 ### Fixed
+- **Sim speed no longer tracks display refresh.** The main loop paced with a
+  fixed 1 ms delay while `game_tick` advances a fixed `SIM_DT` (1/60 s), so with
+  vsync the game ran at the monitor's refresh rate — too fast on a high-refresh
+  panel (or with vsync off). It now sleeps the remainder of each frame's
+  1/60 s budget via `gfx_ticks`, so the sim runs at wall-clock 60 Hz. (A
+  full fixed-timestep catch-up accumulator, for machines that can't hit 60 fps,
+  remains a follow-up — it needs on-SDL testing.)
+- **A stunned predator no longer bites the player.** The predator-player bite
+  was gated only on recent-hit invulnerability; a predator stunned by the
+  electric part still chewed through your energy while sitting on you. It now
+  also checks `stunned_timer`, so the stun is actually defensive. Guarded by a
+  regression test.
+- **DQN loss telemetry now matches the objective it descends.** The logged
+  Huber loss used the half-scale convention while the gradient used the
+  un-halved one, so `train_log.csv`'s loss column read at half the true scale
+  (and `--lr` looked half as effective as it was). The logged value now matches
+  the gradient; training trajectories are unchanged.
+- Hardened two latent scope-clobber sites (`_hit_test_btn`'s `result`,
+  `draw_creature_body`'s `mx`/`my`) with `local` so a render/hit-test can never
+  overwrite the module-global mouse/return state on a future refactor.
+
+### Performance
+- **DQN `train_step`: `next_obs` is stacked once, not twice.** Double-DQN
+  forwards the next state through both the target and online nets; each forward
+  rebuilt the `[batch × 433]` stacked buffer, so it ran twice on identical data
+  (plus discarded two backprop caches). A cache-free `forward_stacked` now
+  shares one stacked buffer — byte-identical output.
+- **Inference: no redundant obs copy per frame.** `policy_decide` copied its
+  already-buffer observation into a fresh 433-element buffer every step;
+  `build_stacked_observation` already returns a buffer, so it's passed straight
+  through.
+
 - `spawn_meat` now always produces meat: when the fixed meat pool is full
   (a burst of kills faster than meat expires) it recycles the
   soonest-to-expire slot instead of silently dropping the chunk. Removes an

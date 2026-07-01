@@ -179,6 +179,18 @@ define buffer_sample(buf, batch_size) as:
 # Forward pass with cache (for backprop)
 # ============================================================
 
+# Forward on an ALREADY-stacked [bs x input] buffer, returning just q (no
+# backprop cache). Used for the next-state value estimates, which don't need a
+# cache — so the same stacked buffer can feed both next-state forwards without
+# rebuilding it (see train_step's Double-DQN block).
+define forward_stacked(policy, x, bs) as:
+    z1 is add_bias of [(matmul of [x, policy.w1]), policy.b1, bs, NEURAL_HIDDEN1]
+    a1 is relu of z1
+    z2 is add_bias of [(matmul of [a1, policy.w2]), policy.b2, bs, NEURAL_HIDDEN2]
+    a2 is relu of z2
+    q is add_bias of [(matmul of [a2, policy.w3]), policy.b3, bs, NEURAL_ACTIONS]
+    return q
+
 define forward_cached(policy, obs_batch) as:
     # obs_batch: list of 1-D obs buffers -> a [bs x input] buffer, then the
     # forward runs all-buffer (matmul/relu fast path, add_bias broadcast).
@@ -216,10 +228,13 @@ define train_step(online, target, buf, hp) as:
     # positive function-approx error through the bootstrap and drove Q far
     # above realisable returns (~96 vs ~7), collapsing the greedy policy to a
     # single action. Decoupling selection from evaluation removes that bias.
-    t_result is forward_cached of [target, next_obs]
-    q_next_target is t_result[0]
-    o_next is forward_cached of [online, next_obs]
-    q_next_online is o_next[0]
+    # Stack next_obs ONCE and reuse it for both the target-net evaluation and
+    # the online-net action selection — the next-state forwards need no cache,
+    # so this avoids rebuilding the [bs x input] stacked buffer (and discarding
+    # a cache) a second time on identical data.
+    next_x is stack_obs of next_obs
+    q_next_target is forward_stacked of [target, next_x, hp.batch_size]
+    q_next_online is forward_stacked of [online, next_x, hp.batch_size]
 
     # Compute TD targets and error gradient
     bs is hp.batch_size
@@ -245,18 +260,21 @@ define train_step(online, target, buf, hp) as:
         a_taken is actions[i]
         td_err is q_all[ib + a_taken] - td_target
 
-        # Huber loss (delta = 1): quadratic for |err| <= 1, linear beyond, so
-        # large TD errors can't dominate the gradient. The gradient is the TD
-        # error clamped to [-1, 1] — capping at the loss level rather than
-        # relying solely on the cruder per-weight clip applied after backprop.
+        # Huber-shaped loss (delta = 1): quadratic for |err| <= 1, linear
+        # beyond, so large TD errors can't dominate the gradient. The gradient
+        # descends the mean loss with a 2/bs scale, so the LOGGED loss uses the
+        # matching un-halved convention (err^2 in the quadratic region,
+        # 2|err|-1 in the linear region) — value and gradient are continuous at
+        # |err| = 1 and the loss curve reflects the objective actually
+        # minimised (previously logged at half scale).
         abs_err is td_err
         if abs_err < 0.0:
             abs_err is 0.0 - abs_err
         if abs_err <= 1.0:
-            loss is loss + 0.5 * td_err * td_err
+            loss is loss + td_err * td_err
             dq[ib + a_taken] is (2.0 / bs) * td_err
         else:
-            loss is loss + (abs_err - 0.5)
+            loss is loss + (2.0 * abs_err - 1.0)
             grad is 1.0
             if td_err < 0.0:
                 grad is -1.0
