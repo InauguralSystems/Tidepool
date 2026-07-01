@@ -136,7 +136,6 @@ Always run `test_regressions.eigs` before committing game-logic changes.
 | `src/math_utils.eigs` | Torus distance/delta, angle helpers (hot path — inlined elsewhere) |
 | `src/entities.eigs` | Entity + creature-spec constructors, palettes, derived stats |
 | `src/neural.eigs` | MLP policy: forward pass, observation builder, frame stacking, save/load |
-| `src/training.eigs` | In-game background-thread training UI glue |
 | `src/renderer.eigs` | Renderer: creatures, particles, caustics, HUD, camera. Draws via the `draw_*` layer (not `gfx_*` directly), so frames are headless-inspectable. |
 | `src/draw.eigs` | Draw-list layer over the `gfx_*` primitives. Play mode: `draw_*` calls `gfx_*` directly. Record mode (`draw_record_begin`): captures each draw as `{op,a}` for headless inspection (`draw_ops`/`draw_op_count`/`draw_count_of`) — no SDL needed, like DMG's `--render-probe`. Only drawing primitives are wrapped; `gfx_present`/`gfx_poll`/window control stay direct. |
 | `src/editor.eigs` | In-game creature editor UI |
