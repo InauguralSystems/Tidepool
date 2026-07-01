@@ -16,6 +16,7 @@
 # Headless modes:
 #   eigenscript tidepool.eigs --demo 500 --seed 42
 #   eigenscript tidepool.eigs --demo 500 --seed 42 --batch 20
+#   eigenscript tidepool.eigs --version
 
 load_file of "src/game.eigs"
 load_file of "src/neural.eigs"
@@ -27,10 +28,12 @@ load_file of "src/audio.eigs"
 
 define parse_args() as:
     argv is args of null
-    result is {"demo": -1, "seed": -1, "batch": 1}
+    result is {"demo": -1, "seed": -1, "batch": 1, "version": 0}
     i is 0
     loop while i < (len of argv):
         match argv[i]:
+            case "--version":
+                result.version is 1
             case "--demo":
                 if i + 1 < (len of argv):
                     i is i + 1
@@ -47,6 +50,15 @@ define parse_args() as:
     return result
 
 cli is parse_args of null
+
+# --version: report the version (the VERSION file is the single source of
+# truth) and exit before opening a window.
+if cli.version == 1:
+    tp_version is "unknown"
+    if file_exists of "VERSION":
+        tp_version is trim of (read_text of "VERSION")
+    print of f"Tidepool {tp_version}"
+    exit of 0
 
 # ============================================================
 # Headless demo mode
