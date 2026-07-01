@@ -10,7 +10,7 @@ a real limitation hit during non-trivial game development.
 - Severity: Medium
 - Workaround: Chain 8 short sine/saw tones at linearly interpolated frequencies via `generate_sweep()` in audio.eigs
 - Proper fix: Add `audio_sweep of [freq_start, freq_end, duration, amplitude, waveform]` builtin that generates a continuous frequency sweep with phase continuity
-- **Resolved (2026-06-11):** `audio_sweep` ships in EigenScript (`src/ext_gfx.c`), exact signature as requested, phase-continuous (`waveform`: 0=sine, 1=sawtooth). Predates this gap-sweep round — it was already shipped when GAPS.md was written. Replace the `generate_sweep()` helper in `audio.eigs` with the builtin.
+- **Resolved (2026-06-11):** `audio_sweep` ships in EigenScript (`src/ext_gfx.c`), exact signature as requested, phase-continuous (`waveform`: 0=sine, 1=sawtooth). Predates this gap-sweep round — it was already shipped when GAPS.md was written. Done: the `generate_sweep()` helper in `audio.eigs` now wraps `audio_sweep` directly.
 
 ## GAP-002: No loop playback for audio ⚠️ PARTIALLY RESOLVED (finite count)
 - Found during: Audio Synthesis (Phase 1)

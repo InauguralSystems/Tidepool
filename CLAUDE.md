@@ -19,7 +19,8 @@ from-scratch DQN trainer are all EigenScript.
 Tidepool is a faithful homage to **Spore's cell stage** (Maxis): diet
 choice (herbivore/carnivore/omnivore), eat food and meat, spend DNA in
 the editor on parts (filter/jaw/proboscis mouths; fin/claw/cilia/poison/
-electric/jet appendages), call a mate to evolve, grow through scale tiers,
+electric/jet appendages), grow through scale tiers via a deliberate evolve
+action (mate-calling is optional flavor — see the progression rework below),
 dodge giant "epic" cells. The systems are ported faithfully — it is not a
 loose tribute.
 
@@ -48,27 +49,29 @@ EigenScript is **not** vendored in this repo. You need its interpreter
 binary. To build it from source:
 
 ```bash
-# v0.19.0 ships the shaped VAL_BUFFER feature (#275) the neural policy's buffers
-# depend on; matches .devcontainer/Dockerfile's EIGS_REF.
-git clone --branch v0.19.0 https://github.com/InauguralSystems/EigenScript.git
+# The neural policy needs the shaped VAL_BUFFER feature (#275), which lands in
+# v0.19.0; CI and the devcontainer pin a newer release via
+# .devcontainer/Dockerfile's EIGS_REF (currently v0.21.2) — build that for parity.
+git clone --branch v0.21.2 https://github.com/InauguralSystems/EigenScript.git
 cd EigenScript
 make build      # headless binary -> src/eigenscript  (no SDL2 needed)
-make gfx        # graphical binary (requires libsdl2-dev) for the playable game
+make gfx        # graphical binary for the playable game (dlopens SDL2 at run
+                # time — needs libsdl2-2.0-0 installed, but NO -dev headers to build)
 ```
 
 - **Headless** (`make build`) is enough for all `test_*.eigs`,
   `train.eigs`, and `eval_policy.eigs`.
 - **Graphical** (`make gfx` / `make install-gfx`) is required for
   `tidepool.eigs` itself and `test_frametime.eigs` (they call `gfx_*`).
-- Minimum language version for current features is **v0.13.0** (uses
-  multi-arg `spawn`, `recv_timeout`, `audio_play_loop`); background music
-  needs `audio_music_*` (EigenScript 0.18.0). **Current pin: EigenScript
-  v0.19.0** (shaped `VAL_BUFFER`, #275) — the neural policy stores its
-  weights/obs as flat shaped buffers (`buffer of [r, c]`), so it requires
-  v0.19.0. The forward is ~7× faster than the old nested-list form and the
-  trainer's backprop ~1.8×, both byte-identical; `models/policy.txt` stays
-  format-compatible. Validated headless (regressions, obs-stacking, game_tick,
-  train pipeline).
+- **Minimum EigenScript version is v0.19.0** — the neural policy stores its
+  weights/obs as flat shaped buffers (`buffer of [r, c]`, shaped `VAL_BUFFER`
+  #275), which land in v0.19.0. (Background music needs `audio_music_*` from
+  0.18.0; the older `spawn`/`recv_timeout`/`audio_play_loop` niceties are
+  v0.13.0.) **CI and the devcontainer pin v0.21.2** (`.devcontainer/Dockerfile`
+  `EIGS_REF`). The flat-buffer forward is ~7× faster than the old nested-list
+  form and the trainer's backprop ~1.8×, both byte-identical; `models/policy.txt`
+  stays format-compatible. Validated headless (regressions, obs-stacking,
+  game_tick, train pipeline).
 
 Run a script:
 
@@ -116,7 +119,7 @@ $EIG train.eigs --episodes 800 --resume --eps-start 0.4
 
 # Evaluate trained vs hand-coded autopilot vs random (same world the
 # trainer uses, 40x20, so the comparison is apples-to-apples):
-$EIG eval_policy.eigs --seeds 20 --ticks 600
+$EIG eval_policy.eigs --seeds 20 --ticks 1000
 
 # Play (needs gfx binary + SDL2):
 $EIG tidepool.eigs

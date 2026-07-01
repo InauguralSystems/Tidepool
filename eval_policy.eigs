@@ -9,7 +9,7 @@
 # hand-coded autopilot.
 #
 # Usage:
-#   eigenscript eval_policy.eigs --seeds 20 --ticks 600
+#   eigenscript eval_policy.eigs --seeds 20 --ticks 1000
 
 load_file of "src/game.eigs"
 load_file of "src/neural.eigs"
