@@ -6,6 +6,13 @@ All notable changes to Tidepool are documented here. The format is based on
 
 ## [Unreleased]
 
+### Repository
+- Open-source readiness pass ahead of going public: added `CODE_OF_CONDUCT.md`,
+  issue/PR templates, `.github/dependabot.yml` (github-actions), an OpenSSF
+  Scorecard workflow, and an `assets/` license note; aligned the LICENSE
+  copyright to `InauguralSystems and contributors`; refreshed README badges and
+  the EigenScript version floor (v0.19.0+, CI pins v0.21.2).
+
 ### Removed
 - **The in-game "background trainer" (`src/training.eigs`), which never
   trained.** Its worker saved a demo log and reported `"done"` without any

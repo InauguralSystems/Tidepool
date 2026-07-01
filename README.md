@@ -1,6 +1,8 @@
 # Tidepool
 
 [![tests](https://github.com/InauguralSystems/Tidepool/actions/workflows/tests.yml/badge.svg)](https://github.com/InauguralSystems/Tidepool/actions/workflows/tests.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/InauguralSystems/Tidepool/badge)](https://securityscorecards.dev/viewer/?uri=github.com/InauguralSystems/Tidepool)
+[![release](https://img.shields.io/github/v/release/InauguralSystems/Tidepool)](https://github.com/InauguralSystems/Tidepool/releases/latest)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A Spore-inspired cell-stage evolution game written entirely in
@@ -40,9 +42,11 @@ all EigenScript.
 
 ## Requirements
 
-EigenScript v0.18.0 or later (background music needs the `audio_music_*`
-builtins added in 0.18.0; also install `libsdl2-mixer-2.0-0` for music). Check
-it out alongside this repo and build it:
+EigenScript v0.19.0 or later — the neural policy stores its weights as flat
+shaped buffers (`#275`, v0.19.0), and background music needs the `audio_music_*`
+builtins (v0.18.0) plus `libsdl2-mixer-2.0-0` at runtime. CI builds against the
+pinned version in `.devcontainer/Dockerfile` (currently v0.21.2). Check it out
+alongside this repo and build it:
 
 ```bash
 git clone https://github.com/InauguralSystems/EigenScript.git   # ../EigenScript
@@ -62,6 +66,10 @@ make shot     # regenerate the gameplay screenshot headless (needs xvfb)
 ```
 
 Or run directly: `/path/to/EigenScript/src/eigenscript tidepool.eigs`.
+
+The repo ships a devcontainer (`.devcontainer/`) that builds a pinned EigenScript
+from source, so it also opens in a [GitHub Codespace](https://codespaces.new/InauguralSystems/Tidepool)
+with the toolchain ready — run `make test` / `make shot` there without a local setup.
 
 ## Controls
 
