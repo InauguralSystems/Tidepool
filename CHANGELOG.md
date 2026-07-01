@@ -6,12 +6,21 @@ All notable changes to Tidepool are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`--version` flag** (`eigenscript tidepool.eigs --version`) reports the
+  version from the `VERSION` file (the single source of truth) and exits.
+
 ### Repository
 - Open-source readiness pass ahead of going public: added `CODE_OF_CONDUCT.md`,
   issue/PR templates, `.github/dependabot.yml` (github-actions), an OpenSSF
   Scorecard workflow, and an `assets/` license note; aligned the LICENSE
   copyright to `InauguralSystems and contributors`; refreshed README badges and
   the EigenScript version floor (v0.19.0+, CI pins v0.21.2).
+- **Release automation** (`.github/workflows/release.yml`): a tag push or the
+  dispatch path publishes a versioned source archive (`git archive`) with
+  `CHECKSUMS`, a Sigstore build-provenance attestation, and CHANGELOG-derived
+  notes; it verifies the tag matches `VERSION`. Release process documented in
+  CLAUDE.md.
 
 ### Removed
 - **The in-game "background trainer" (`src/training.eigs`), which never

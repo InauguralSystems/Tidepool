@@ -1,0 +1,134 @@
+name: Release
+
+# Tidepool is a source-only game (it runs on the EigenScript interpreter, there
+# is no compiled binary), so a "release" is a versioned, integrity-checked
+# source archive of the game + trainer.
+#
+# Two entry points:
+#  - pushing a v* tag (the classic path), or
+#  - workflow_dispatch, which creates the tag itself (version defaults to the
+#    VERSION file) and then builds the release. The dispatch path exists because
+#    tags can't always be pushed from every environment, and a GITHUB_TOKEN-pushed
+#    tag would not retrigger this workflow — so the dispatch run does it end to end.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag and release (default: the VERSION file)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VER="${{ inputs.version }}"
+            [ -z "$VER" ] && VER="$(cat VERSION)"
+            echo "tag=v${VER#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create tag (dispatch only, idempotent)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "tag $TAG already exists on origin — releasing it as-is"
+          else
+            git tag -a "$TAG" -m "Tidepool $TAG"
+            git push origin "$TAG"
+          fi
+
+  release:
+    needs: tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          ref: ${{ needs.tag.outputs.tag }}
+
+      # Guard: the tag must match the VERSION file so the release, the VERSION
+      # file, and `--version` never disagree.
+      - name: Verify VERSION matches tag
+        run: |
+          TAG="${{ needs.tag.outputs.tag }}"
+          FILE_VER="v$(cat VERSION | tr -d '[:space:]')"
+          if [ "$TAG" != "$FILE_VER" ]; then
+            echo "::error::tag $TAG does not match VERSION file ($FILE_VER). Bump VERSION before releasing."
+            exit 1
+          fi
+
+      # Deterministic source archive of the tracked tree (git archive respects
+      # .gitattributes; generated dirs like models/ and saves/ are gitignored
+      # and not tracked, so they're excluded automatically).
+      - name: Build source archive
+        run: |
+          TAG="${{ needs.tag.outputs.tag }}"
+          NAME="tidepool-${TAG}"
+          git archive --format=tar.gz --prefix="${NAME}/" -o "${NAME}.tar.gz" HEAD
+          ls -lh "${NAME}.tar.gz"
+
+      # Verifiable with `sha256sum -c CHECKSUMS`.
+      - name: Generate CHECKSUMS
+        run: |
+          sha256sum tidepool-*.tar.gz > CHECKSUMS
+          cat CHECKSUMS
+
+      # Sigstore keyless provenance for the source archive. Verifiable with
+      # `gh attestation verify tidepool-<tag>.tar.gz --repo InauguralSystems/Tidepool`.
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
+        with:
+          subject-path: 'tidepool-*.tar.gz'
+
+      - name: Stage attestation bundle for release
+        run: cp "${{ steps.attest.outputs.bundle-path }}" attestation.sigstore.json
+
+      # Release notes come from the matching CHANGELOG section; fall back to a
+      # pointer if the section is absent.
+      - name: Extract changelog section
+        run: |
+          TAG="${{ needs.tag.outputs.tag }}"
+          VER="${TAG#v}"
+          awk -v tag="[$VER]" '
+            /^## / { if (found) exit; if (index($0, tag)) { found=1; next } }
+            found { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "See [CHANGELOG.md](CHANGELOG.md) for changes in $TAG." > RELEASE_NOTES.md
+          fi
+          echo "----- release notes -----"; cat RELEASE_NOTES.md
+
+      - name: Create/Upload release
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        with:
+          tag_name: ${{ needs.tag.outputs.tag }}
+          name: Tidepool ${{ needs.tag.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            tidepool-*.tar.gz
+            CHECKSUMS
+            attestation.sigstore.json
