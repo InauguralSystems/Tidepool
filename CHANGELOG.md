@@ -6,6 +6,14 @@ All notable changes to Tidepool are documented here. The format is based on
 
 ## [Unreleased]
 
+### Removed
+- **The in-game "background trainer" (`src/training.eigs`), which never
+  trained.** Its worker saved a demo log and reported `"done"` without any
+  gradient step, so watch mode showed a "training done / policy promoted" toast
+  while the policy was unchanged. Real training is the standalone `train.eigs`
+  (an off-box job); watch mode (Tab) still runs the loaded policy. Also drops
+  the orphaned demo-logging (nothing read `models/demo_log.txt`). Closes #12.
+
 ### Added
 - **Looping background music** (`assets/music/tidepool_background.mp3`), played
   via EigenScript 0.18.0's new `audio_music_*` builtins on startup. Degrades
