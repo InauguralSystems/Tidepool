@@ -788,6 +788,15 @@ define _hit_test_btn(widget, ox, oy, mx, my, btn_id) as:
 FRAME_MS is 1000.0 / 60.0
 frame_next is gfx_ticks of null
 
+# Fixed-timestep catch-up state (#13). The frame limiter below fixes the
+# too-fast direction; this fixes the too-slow one: on hardware that renders
+# below 60 fps, the sim steps more than once per rendered frame so it stays
+# at wall-clock speed. sim_catchup (src/game.eigs) holds the arithmetic.
+MAX_SUBSTEPS is 5
+STALL_CLAMP_MS is 250.0
+sim_accum is 0.0
+sim_last is gfx_ticks of null
+
 loop while running == 1:
     # Process all pending events
     ev is gfx_poll of null
@@ -975,19 +984,35 @@ loop while running == 1:
     bg_tick is bg_tick + 1
 
     # ---- Update ----
+    # Sample real elapsed every frame — pause/menu frames advance sim_last
+    # without accumulating, so un-pausing never replays the pause.
+    sim_now is gfx_ticks of null
+    sim_elapsed is sim_now - sim_last
+    sim_last is sim_now
     if game_state == STATE_PLAYING:
         if game != null:
-            if watch_mode == 1:
-                if neural != null:
-                    obs is build_observation of game
-                    push_observation of [obs_stack, obs]
-                    stacked is build_stacked_observation of [obs_stack, game]
-                    policy_decide of [neural, stacked, game]
+            catchup is sim_catchup of [sim_accum, sim_elapsed, FRAME_MS, MAX_SUBSTEPS, STALL_CLAMP_MS]
+            substeps is catchup[0]
+            sim_accum is catchup[1]
+            # The decision path runs per SUBSTEP (not per frame) so the sim
+            # stays causal at any frame rate. Event-flag coalescing is the
+            # documented tradeoff (#13): the renderer sees only the last
+            # substep's game.event_* flags, so a mid-catch-up particle burst
+            # can drop — accepted over slowing the sim.
+            sstep is 0
+            loop while sstep < substeps and game.game_over == 0:
+                if watch_mode == 1:
+                    if neural != null:
+                        obs is build_observation of game
+                        push_observation of [obs_stack, obs]
+                        stacked is build_stacked_observation of [obs_stack, game]
+                        policy_decide of [neural, stacked, game]
+                    else:
+                        autopilot_decide of game
                 else:
-                    autopilot_decide of game
-            else:
-                apply_held_keys of [game, keys_held]
-            game_tick of game
+                    apply_held_keys of [game, keys_held]
+                game_tick of game
+                sstep is sstep + 1
             audio_game_update of game
             update_hud of game
 
