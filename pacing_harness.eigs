@@ -1,0 +1,57 @@
+# Empirical pacing harness (#13) — run under xvfb-run with the gfx binary.
+# Replicates the main loop's pacing exactly (frame limiter from PR #11 +
+# sim_catchup accumulator) with an ARTIFICIAL per-frame render cost passed
+# as argv[0] (ms), and reports frames vs sim ticks over ~2s of wall time.
+# Acceptance (#13): with a 25ms render cost (~40 fps), ticks still track
+# wall-clock 60 Hz.
+load_file of "src/game.eigs"
+
+argv is args of null
+extra_ms is 0.0
+if (len of argv) >= 1:
+    extra_ms is num of argv[0]
+
+FRAME_MS is 1000.0 / 60.0
+MAX_SUBSTEPS is 5
+STALL_CLAMP_MS is 250.0
+
+gfx_open of [160, 120, "pacing"]
+game is new_game of [60.0, 20.0, 42]
+
+t0 is gfx_ticks of null
+frame_next is t0
+sim_accum is 0.0
+sim_last is t0
+frames is 0
+ticks is 0
+
+loop while (gfx_ticks of null) - t0 < 2000.0:
+    # simulated render cost
+    if extra_ms >= 1.0:
+        gfx_delay of (floor of extra_ms)
+
+    sim_now is gfx_ticks of null
+    sim_elapsed is sim_now - sim_last
+    sim_last is sim_now
+    catchup is sim_catchup of [sim_accum, sim_elapsed, FRAME_MS, MAX_SUBSTEPS, STALL_CLAMP_MS]
+    sim_accum is catchup[1]
+    sstep is 0
+    loop while sstep < catchup[0]:
+        game_tick of game
+        ticks is ticks + 1
+        sstep is sstep + 1
+    frames is frames + 1
+
+    # frame limiter (PR #11 shape)
+    frame_next is frame_next + FRAME_MS
+    frame_wait is frame_next - (gfx_ticks of null)
+    if frame_wait >= 1.0:
+        gfx_delay of (floor of frame_wait)
+    elif frame_wait < (0.0 - FRAME_MS):
+        frame_next is gfx_ticks of null
+
+elapsed_total is (gfx_ticks of null) - t0
+gfx_close of null
+eff_fps is (frames * 1000.0) / elapsed_total
+eff_tps is (ticks * 1000.0) / elapsed_total
+print of f"frames={frames} ticks={ticks} elapsed={elapsed_total}ms fps={eff_fps} tps={eff_tps}"

@@ -1563,3 +1563,28 @@ define load_creature(spec) as:
             case "spine_bend":
                 spec.spine_bend is _csv_to_list of [val, CREATURE_SPINE_JOINTS]
     return 1
+
+
+# ============================================================
+# Fixed-timestep catch-up (#13)
+# ============================================================
+# Pure pacing arithmetic for the main loop's catch-up accumulator: given
+# the accumulator and the real elapsed ms since the last frame, return
+# [substeps_to_run, new_accumulator]. Elapsed is clamped (a stall must not
+# replay as a tick burst), substeps are capped (rendering must get a turn
+# on hardware that can't keep up), and when the cap is hit the remaining
+# debt is DROPPED — the sim slows rather than spiraling.
+define sim_catchup(accum, elapsed, step_ms, max_steps, stall_clamp) as:
+    local e is elapsed
+    if e < 0.0:
+        e is 0.0
+    if e > stall_clamp:
+        e is stall_clamp
+    local a is accum + e
+    local steps is 0
+    loop while a >= step_ms and steps < max_steps:
+        a is a - step_ms
+        steps is steps + 1
+    if a >= step_ms:
+        a is 0.0
+    return [steps, a]

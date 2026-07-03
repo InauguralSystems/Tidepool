@@ -44,6 +44,7 @@ test: | $(EIG)
 	check test_regressions.eigs "All regressions passed"; \
 	check test_obs_stack.eigs   "All observation stacking tests passed"; \
 	check test_game.eigs        "Test complete"; \
+	check test_pacing.eigs      "All pacing tests passed"; \
 	if [ $$fail -eq 0 ]; then echo "all headless tests passed"; else exit 1; fi
 
 # Parse-check every source.
