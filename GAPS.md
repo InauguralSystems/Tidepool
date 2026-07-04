@@ -12,21 +12,21 @@ a real limitation hit during non-trivial game development.
 - Proper fix: Add `audio_sweep of [freq_start, freq_end, duration, amplitude, waveform]` builtin that generates a continuous frequency sweep with phase continuity
 - **Resolved (2026-06-11):** `audio_sweep` ships in EigenScript (`src/ext_gfx.c`), exact signature as requested, phase-continuous (`waveform`: 0=sine, 1=sawtooth). Predates this gap-sweep round — it was already shipped when GAPS.md was written. Done: the `generate_sweep()` helper in `audio.eigs` now wraps `audio_sweep` directly.
 
-## GAP-002: No loop playback for audio ⚠️ PARTIALLY RESOLVED (finite count)
+## GAP-002: No loop playback for audio ✅ RESOLVED (infinite included — EigenScript PR #375)
 - Found during: Audio Synthesis (Phase 1)
 - Severity: Medium
 - Workaround: Poll `audio_queue_size` each frame and re-queue ambient samples when buffer runs low
 - Proper fix: Add `audio_loop of samples` that continuously re-queues, or `audio_play of [samples, loops]` with loop count (-1 for infinite)
 - **Resolved finite form (EigenScript 0.13.0 commit `16ca2b2`):** `audio_play_loop of [samples, loops]` queues the samples `loops` times in one call (finite, `loops >= 1`). Returns total samples queued (`len of samples * loops`), or `0` on bad args / closed device. Drops the per-frame poll-and-refill for any finite repetition (game ambient that plays N times, sound cue repeated, music loop that ends with the level).
-- **Still open: infinite loop variant.** `loops == -1` currently returns `0` — reserved for a future ship that adds a background refill mechanism. Until then, keep the poll-and-refill workaround for genuinely infinite cases.
+- **Resolved infinite form (EigenScript PR #375, 2026-07-03):** the audio device is now a 16-channel callback mixer; `audio_play_loop of [samples, -1]` loops forever (the mixer rewinds one owned copy — loop count no longer multiplies memory) and returns a channel id. Drop the poll-and-refill workaround entirely at the next runtime-pin bump. Note the return-value change: play/play_loop now return a channel id, not a sample count.
 
-## GAP-003: No per-channel volume control
+## GAP-003: No per-channel volume control ✅ RESOLVED (EigenScript PR #375)
 - Found during: Audio Synthesis (Phase 1)
 - Severity: Low
-- Workaround: Pre-scale danger sound with `audio_gain` each frame based on threat proximity (allocates new sample list each time)
-- Proper fix: Add multi-channel support: `audio_play` returns channel ID, `audio_volume of [channel, vol]` adjusts live
+- Workaround (obsolete at next pin bump): Pre-scale danger sound with `audio_gain` each frame based on threat proximity (allocates new sample list each time)
+- **Resolved (EigenScript PR #375, 2026-07-03):** exactly the proposed shape — `audio_play` returns a channel id and `audio_volume of [channel, vol]` adjusts a playing channel live (0.0–4.0); `audio_stop of channel` stops one channel. Replace the per-frame `audio_gain` re-render with one `audio_volume` call at the next runtime-pin bump.
 
-## GAP-004: Inner loop performance with function calls
+## GAP-004: Inner loop performance with function calls ✅ LARGELY DELIVERED UPSTREAM (ledger refresh 2026-07-03: both proper-fix asks shipped — the bytecode VM + copy-and-patch JIT landed in v0.12.0, and `nearest_in_range` / `nearest_in_range_all` exist as builtins; the manual inlining below remains good practice per the hot-loop playbook, and re-measuring against a current pin would quantify what's left of the gap)
 - Found during: NPC AI (Phase 2)
 - Severity: High
 - Workaround: Run expensive searches (food-seeking, NPC hunting, boid flocking) only on retarget ticks (~every 30-90 frames) instead of every tick. Use distance-squared comparisons to avoid `sqrt`. Still 4x slower than simple wander AI (50ms vs 12ms per tick with 8 predators + 52 food).
