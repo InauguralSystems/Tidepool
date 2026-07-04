@@ -67,7 +67,7 @@ make gfx        # graphical binary for the playable game (dlopens SDL2 at run
   weights/obs as flat shaped buffers (`buffer of [r, c]`, shaped `VAL_BUFFER`
   #275), which land in v0.19.0. (Background music needs `audio_music_*` from
   0.18.0; the older `spawn`/`recv_timeout`/`audio_play_loop` niceties are
-  v0.13.0.) **CI and the devcontainer pin v0.21.2** (`.devcontainer/Dockerfile`
+  v0.13.0.) **CI and the devcontainer pin v0.24.0** (`.devcontainer/Dockerfile`
   `EIGS_REF`). The flat-buffer forward is ~7× faster than the old nested-list
   form and the trainer's backprop ~1.8×, both byte-identical; `models/policy.txt`
   stays format-compatible. Validated headless (regressions, obs-stacking,
