@@ -6,6 +6,17 @@ All notable changes to Tidepool are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Fixed-timestep catch-up accumulator.** The main loop now accumulates real
+  elapsed time and steps `game_tick` in fixed `SIM_DT` increments until the
+  accumulator drains, so hardware that renders below 60 fps no longer slows the
+  sim (the v0.2.0 limiter fixed only the too-fast direction). Pacing arithmetic
+  (`sim_catchup` in `src/game.eigs`) clamps elapsed at 250 ms, caps substeps at
+  5, and drops the debt at the cap so a stall never replays as a tick burst.
+  The decision path (policy / autopilot / held keys) runs per substep, keeping
+  the sim causal at any frame rate. Covered by `test_pacing.eigs` (wired into
+  `make test`).
+
 ## [0.2.0] — 2026-07-01
 
 First release since Tidepool went public. A full adversarial code review (five

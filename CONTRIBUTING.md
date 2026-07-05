@@ -31,7 +31,8 @@ make run      # play the game (needs the graphical binary + a display)
 ```
 
 All targets work from any directory and require EigenScript **v0.19.0+** (the
-neural policy's flat buffers; CI pins v0.21.2).
+neural policy's flat buffers; CI pins the version in `.devcontainer/Dockerfile`'s
+`EIGS_REF`).
 
 ## Before you open a PR
 

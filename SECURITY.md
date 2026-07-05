@@ -24,5 +24,5 @@ to reproduce and the affected EigenScript version.
 ## Supported versions
 
 The latest release on `main` is supported. Tidepool tracks a pinned EigenScript
-version (see `.devcontainer/Dockerfile`'s `EIGS_REF`, currently v0.21.2); run
+version (see `.devcontainer/Dockerfile`'s `EIGS_REF`); run
 against that or newer (the neural policy's flat buffers need v0.19.0+).

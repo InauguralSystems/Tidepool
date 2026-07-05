@@ -51,8 +51,9 @@ binary. To build it from source:
 ```bash
 # The neural policy needs the shaped VAL_BUFFER feature (#275), which lands in
 # v0.19.0; CI and the devcontainer pin a newer release via
-# .devcontainer/Dockerfile's EIGS_REF (currently v0.21.2) — build that for parity.
-git clone --branch v0.21.2 https://github.com/InauguralSystems/EigenScript.git
+# .devcontainer/Dockerfile's EIGS_REF — build that for parity.
+EIGS_REF=$(grep -oP 'ARG EIGS_REF=\K.*' .devcontainer/Dockerfile)
+git clone --branch "$EIGS_REF" https://github.com/InauguralSystems/EigenScript.git
 cd EigenScript
 make build      # headless binary -> src/eigenscript  (no SDL2 needed)
 make gfx        # graphical binary for the playable game (dlopens SDL2 at run
@@ -87,7 +88,7 @@ binary path (it lives in the sibling `../EigenScript` repo; override with
 
 ```bash
 make build   # build the headless EigenScript binary
-make test    # headless suite (test_regressions, test_obs_stack, test_game)
+make test    # headless suite (test_regressions, test_obs_stack, test_game, test_pacing)
 make lint    # parse-check every .eigs source
 make gfx     # build the graphical (SDL2) binary
 make run     # play the game (needs gfx + a display)
@@ -109,6 +110,7 @@ $EIG test_game.eigs          # 300-tick smoke sim
 $EIG test_regressions.eigs   # tier progression, torus wrap, collision, meat pool
 $EIG test_game_tick.eigs     # game_tick microbenchmark (n=5)
 $EIG test_obs_stack.eigs     # neural observation-stacking unit tests
+$EIG test_pacing.eigs        # fixed-timestep catch-up accumulator checks
 
 # Train the DQN policy (writes models/policy.txt):
 $EIG train.eigs --episodes 800 --seed 42

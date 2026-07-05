@@ -40,7 +40,14 @@ game visibly stutters.
 Linux, `mach_absolute_time` on macOS, `QueryPerformanceCounter` on
 Windows. Return i64 nanoseconds. No allocation per call.
 
-## 2. Stdlib module resolution for external projects
+## 2. Stdlib module resolution for external projects ✅ RESOLVED
+
+**Resolved**: `load_file` now also resolves exe-dir-relative and system paths —
+it tries `<exe_dir>/../<path>`, `<exe_dir>/../lib/eigenscript/<path>`, and
+`~/.local/lib/eigenscript/<path>`, so a script run from any directory finds the
+stdlib alongside the binary (shipped from the "possible fixes" below). Empirically
+`load_file of "lib/test.eigs"` resolves when running a script from Tidepool, so
+`test_regressions.eigs` could now use `lib/test.eigs` instead of the bare `assert`.
 
 **Want**: `load_file of "lib/test.eigs"` (or `import test`) should find
 EigenScript's stdlib modules regardless of the caller's working directory.

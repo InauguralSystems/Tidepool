@@ -45,7 +45,7 @@ all EigenScript.
 EigenScript v0.19.0 or later — the neural policy stores its weights as flat
 shaped buffers (`#275`, v0.19.0), and background music needs the `audio_music_*`
 builtins (v0.18.0) plus `libsdl2-mixer-2.0-0` at runtime. CI builds against the
-pinned version in `.devcontainer/Dockerfile` (currently v0.21.2). Check it out
+pinned version in `.devcontainer/Dockerfile`'s `EIGS_REF`. Check it out
 alongside this repo and build it:
 
 ```bash

@@ -28,8 +28,6 @@ Wall-clock per measurement (ms), median/mean/min/max over 5 runs:
 
 Per-tick figure: ~1.7 ms/tick (game_tick alone, no render).
 
-Raw run log: `frametime-v0.12.0-n5.log`.
-
 ### Notes / open questions
 
 - The first run of this session, against an `./build.sh`-produced
