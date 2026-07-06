@@ -1,3 +1,4 @@
+# lint: allow-file E003 -- fragment of tidepool.eigs: sibling modules (constants, clamp, palette, ...) are load_file-bound by the entry point before this file runs
 # ============================================================
 # Neural Policy — MLP inference and training for Tidepool
 # ============================================================
