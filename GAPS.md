@@ -63,3 +63,18 @@ a real limitation hit during non-trivial game development.
   decode via libmpg123. SDL_mixer is `dlopen`ed lazily; requires
   `libsdl2-mixer-2.0-0` at runtime. Tidepool now plays a looping background
   track (`assets/music/tidepool_background.mp3`).
+
+## GAP-008: Silent question-word "assignment" — no lint warning (filed: EigenScript#583)
+- Found during: Audio-init hardening (issue #23, 2026-07-12)
+- Severity: Medium (silent-wrong output, zero diagnostics)
+- What happened: in a catch handler, `local why is "init failed"` followed by
+  `why is "no audio builtins in this build"` inside an `if` silently kept the
+  stale value — `why` is a question word, so the bare statement is the
+  interrogative form (an expression evaluated and discarded), never an
+  assignment. The game printed the wrong fallback message; nothing failed.
+- Workaround: renamed the variable (`why` → `reason`). House rule: never bind
+  question words (`what who when where why how`) with plain `is`.
+- Proper fix: a lint W-rule flagging an interrogative used as a bare
+  statement (its result is always discarded — dead code at best, a mistaken
+  assignment at worst, especially when a same-named binding is in scope).
+  Filed upstream as [EigenScript#583](https://github.com/InauguralSystems/EigenScript/issues/583).

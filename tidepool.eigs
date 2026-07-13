@@ -427,7 +427,7 @@ define build_gameover_overlay() as:
     ui.add_child of [box, sep2]
 
     # Hint
-    hint is ui.label of ["go_hint", 30, 252, "M to call mate  E to edit/evolve"]
+    hint is ui.label of ["go_hint", 30, 252, "Enter: play again   Esc: menu"]
     hint.color is [100, 110, 130]
     hint.scale is 1
     ui.add_child of [box, hint]
@@ -943,7 +943,7 @@ loop while running == 1:
                     if _editor_root != null:
                         # Check Done/Cancel
                         if (check_button_click of [_editor_root, mx, my, "ed_done"]) == 1:
-                            editor_apply_to_spec of game.creature
+                            editor_apply_to_spec of [game.creature, game]
                             editor_close of null
                             game_state is STATE_PLAYING
                         elif (check_button_click of [_editor_root, mx, my, "ed_cancel"]) == 1:

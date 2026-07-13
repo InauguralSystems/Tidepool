@@ -5,6 +5,8 @@
 load_file of "src/game.eigs"
 load_file of "src/editor.eigs"
 load_file of "src/renderer.eigs"
+load_file of "src/audio.eigs"
+import ui
 
 print of "=== Tidepool regressions ==="
 
@@ -286,6 +288,119 @@ define stun_bite_loss(stun) as:
 assert of [(stun_bite_loss of 0) > 0, "an un-stunned predator on the player bites"]
 assert of [(stun_bite_loss of 90) == 0, "a stunned predator does NOT bite the player"]
 print of "  stunned predator does not bite: ok"
+
+# ------------------------------------------------------------
+# Particle re-fire on frozen frames (#21) — process_game_events consumes
+# the event flags and fires the wake once per tick, so overlay frames
+# (pause / game-over render without game_tick re-arming the flags) cannot
+# re-spawn bursts every frame. Existing particles still decay normally.
+# ------------------------------------------------------------
+pg is new_game of [40.0, 20.0, 7]
+# Drain particles left by earlier sections so the 100-cap can't mask spawns.
+for i in range of 300:
+    update_particles of null
+assert of [(particle_count of null) == 0, "particle drain leaves none alive"]
+
+# A kill event fires its burst exactly once, not once per rendered frame.
+pg.vx is 0.0
+pg.vy is 0.0
+pg.event_kill_x is 5.0
+pg.event_kill_y is 5.0
+pg.event_kill_palette is 0
+process_game_events of pg
+burst is particle_count of null
+assert of [burst > 0, "kill event spawns a death burst"]
+process_game_events of pg
+assert of [(particle_count of null) == burst, "frozen frame does not re-fire the burst"]
+
+# A fresh event (as the next game_tick would set) still fires in play.
+pg.event_kill_x is 6.0
+pg.event_kill_y is 6.0
+process_game_events of pg
+assert of [(particle_count of null) > burst, "a fresh event still spawns a burst"]
+
+# Wake trail: at most one per (third) tick, never once per rendered frame.
+pg.vx is 2.0
+pg.tick is 3
+w0 is particle_count of null
+process_game_events of pg
+w1 is particle_count of null
+assert of [w1 == w0 + 1, "wake fires on a wake tick"]
+process_game_events of pg
+assert of [(particle_count of null) == w1, "frozen frame does not re-fire the wake"]
+pg.tick is 6
+process_game_events of pg
+assert of [(particle_count of null) == w1 + 1, "wake fires again once the tick advances"]
+
+print of "  no particle re-fire on frozen frames: ok"
+
+# ------------------------------------------------------------
+# APPENDAGE_JET renderer case (#22) — a jet appendage must draw a distinct
+# cap (nozzle + thrust lines), not just the bare stalk an unhandled type
+# falls through to.
+# ------------------------------------------------------------
+jg is new_game of [40.0, 20.0, 5]
+jspec is jg.creature
+for i in range of CREATURE_MAX_SOCKETS:
+    jspec.appendages[i] is APPENDAGE_NONE
+draw_record_begin of null
+draw_creature_body of [jspec, 200, 200, 0.0, 16, 0, 0]
+lines_bare is draw_count_of of "line"
+jspec.appendages[0] is APPENDAGE_JET
+draw_record_begin of null
+draw_creature_body of [jspec, 200, 200, 0.0, 16, 0, 0]
+lines_jet is draw_count_of of "line"
+draw_record_end of null
+assert of [lines_jet - lines_bare >= 3, "jet appendage draws a distinct cap beyond the bare stalk"]
+
+print of "  jet appendage renders: ok"
+
+# ------------------------------------------------------------
+# Editor palette unlock gating (#20) — the palette dropdown must respect
+# unlocked_palettes exactly like the part buttons: a locked selection is
+# ignored on Apply, an unlocked one applies.
+# ------------------------------------------------------------
+ug is new_game of [40.0, 20.0, 42]
+ug.creature.palette is 0
+assert of [(part_unlocked of [ug, PART_TYPE_PALETTE, 1]) == 0, "palette 1 starts locked"]
+editor_open of [ug.creature, 800, 600]
+pal_w is ui.find_by_id of [_editor_root, "ed_palette"]
+assert of [pal_w != null, "editor palette dropdown exists"]
+pal_w.selected is 1
+editor_apply_to_spec of [ug.creature, ug]
+assert of [ug.creature.palette == 0, "locked palette selection is not applied"]
+ug.unlocked_palettes is bit_or of [ug.unlocked_palettes, bit_shl of [1, 1]]
+editor_apply_to_spec of [ug.creature, ug]
+assert of [ug.creature.palette == 1, "unlocked palette selection applies"]
+editor_close of null
+
+print of "  editor palette unlock gating: ok"
+
+# ------------------------------------------------------------
+# Audio init hardening (#23) — on a runtime without the audio builtins
+# (this headless build is exactly that), audio_game_init must degrade to
+# silence instead of throwing undefined_name and taking down startup.
+# ------------------------------------------------------------
+audio_game_init of null
+assert of [_audio_ready == 0, "audio stays un-ready without audio builtins"]
+audio_play_sound of "eat_plant"
+assert of [(audio_start_music of null) == 0, "music path still degrades gracefully"]
+
+print of "  audio init degrades without builtins: ok"
+
+# ------------------------------------------------------------
+# Game-over hint (#19) — the overlay must advertise only the keys the
+# game-over handler actually implements (Enter -> play again, Esc -> menu).
+# build_gameover_overlay lives in the gfx entry point, which can't load
+# headless, so guard the source text itself.
+# ------------------------------------------------------------
+tp_src is read_text of "tidepool.eigs"
+stale_hint is "M to call mate  E to edit/evolve"
+live_hint is "Enter: play again   Esc: menu"
+assert of [(index_of of [tp_src, stale_hint]) < 0, "game-over hint no longer lists unhandled keys"]
+assert of [(index_of of [tp_src, live_hint]) >= 0, "game-over hint lists the real controls"]
+
+print of "  game-over hint text: ok"
 
 print of ""
 print of "=== All regressions passed ==="

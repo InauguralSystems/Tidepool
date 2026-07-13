@@ -91,6 +91,14 @@ define draw_caustics(screen_w, game_h, tick) as:
 # Max ~100 particles for Pentium performance
 
 _particles is []
+# Last game.tick a wake particle was spawned on — lets process_game_events
+# fire the wake once per (third) tick instead of once per rendered frame
+# (the pause / game-over overlays render frames without ticking).
+_last_wake_tick is -1
+
+# Live particle count (for headless tests, like get_ppu).
+define particle_count() as:
+    return len of _particles
 
 define update_particles() as:
     alive is []
@@ -365,6 +373,15 @@ define draw_creature_body(spec, sx, sy, angle, radius, tick, spikes_lvl) as:
             elif app_type == APPENDAGE_ELECTRIC:
                 # Electric: small dot
                 draw_circle of [mid_x, mid_y, 2, 100, 180, 255]
+            elif app_type == APPENDAGE_JET:
+                # Jet: short nozzle cone + flickering thrust lines out the back
+                noz_x is mid_x + floor of (lx * side * 5)
+                noz_y is mid_y + floor of (ly * side * 5)
+                draw_line of [mid_x - floor of (fx * 3), mid_y - floor of (fy * 3), noz_x, noz_y, pal.ar, pal.ag, pal.ab]
+                draw_line of [mid_x + floor of (fx * 3), mid_y + floor of (fy * 3), noz_x, noz_y, pal.ar, pal.ag, pal.ab]
+                flick is (sin of (tick * 0.3 + ai * 1.0)) * 2.0
+                draw_line of [noz_x, noz_y, noz_x + floor of (lx * side * (5 + flick)), noz_y + floor of (ly * side * (5 + flick)), pal.er, pal.eg, pal.eb]
+                draw_line of [noz_x, noz_y, noz_x + floor of (lx * side * 3 + fx * 4), noz_y + floor of (ly * side * 3 + fy * 4), pal.er, pal.eg, pal.eb]
 
     # Placed spikes from spec
     for si in range of max_sockets:
@@ -607,20 +624,32 @@ define draw_combat_entities(game, cam_x, cam_y, screen_w, game_h) as:
 # Process game events into particles
 # ============================================================
 
+# Consume-on-read: each event flag is zeroed once its burst is spawned, and
+# the wake only fires when game.tick has advanced. game_tick (the only thing
+# that re-arms the flags via clear_events + event sites) does not run on the
+# pause / game-over overlays, so a frozen frame can no longer re-fire the
+# last tick's bursts every frame — existing particles still decay normally.
 define process_game_events(game) as:
     # Death burst
     if game.event_kill_x >= 0.0:
         spawn_death_burst of [game.event_kill_x, game.event_kill_y, game.event_kill_palette]
+        game.event_kill_x is -1.0
+        game.event_kill_y is -1.0
     # Collision flash
     if game.event_collision_x >= 0.0:
         spawn_collision_flash of [game.event_collision_x, game.event_collision_y]
+        game.event_collision_x is -1.0
+        game.event_collision_y is -1.0
     # Collection sparkle
     if game.event_collect_x >= 0.0:
         spawn_collection_sparkle of [game.event_collect_x, game.event_collect_y]
-    # Wake trail from player movement
+        game.event_collect_x is -1.0
+        game.event_collect_y is -1.0
+    # Wake trail from player movement — once per (third) tick, never per frame
     speed_sq is game.vx * game.vx + game.vy * game.vy
-    if speed_sq > 0.5 and game.tick % 3 == 0:
+    if speed_sq > 0.5 and game.tick % 3 == 0 and game.tick != _last_wake_tick:
         spawn_wake of [game.px, game.py, game.angle]
+        _last_wake_tick is game.tick
 
 # ============================================================
 # Player — always at screen center, with full creature body.

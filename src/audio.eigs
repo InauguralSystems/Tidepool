@@ -37,7 +37,25 @@ define generate_sweep(freq_start, freq_end, duration, volume, waveform) as:
     samples is audio_sweep of [freq_start, freq_end, duration, volume, waveform]
     return audio_envelope of [samples, 0.001, duration * 0.9, 0.1, duration * 0.09]
 
+# Wrapped in try/catch (mirroring audio_start_music) so a runtime without
+# the audio builtins — e.g. the default headless EigenScript build, where
+# audio_open throws a catchable {"kind": "undefined_name"} — can't take
+# down startup. The game runs silent, saying so loudly (same probe-first
+# pattern as DeslanStudio's sink_audio_new).
 define audio_game_init() as:
+    try:
+        return audio_game_init_unsafe of null
+    catch e:
+        _audio_ready is 0
+        local reason is "init failed"
+        if (type of e) == "dict":
+            if has_key of [e, "kind"]:
+                if e["kind"] == "undefined_name":
+                    reason is "no audio builtins in this build"
+        print of f"Audio: {reason} — running silent"
+        return null
+
+define audio_game_init_unsafe() as:
     dev is audio_open of [AUDIO_RATE, AUDIO_CHANNELS]
     if dev == 0:
         print of "Audio: failed to open device"

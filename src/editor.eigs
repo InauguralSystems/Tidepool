@@ -204,13 +204,17 @@ define part_unlocked(game, part_type, part_value) as:
             return bit_and of [game.unlocked_weapons, bit_shl of [1, part_value - 4]]
     return 1
 
-define editor_apply_to_spec(spec) as:
+define editor_apply_to_spec(spec, game is null) as:
     if _editor_root == null:
         return null
 
+    # Palette respects the same unlock gating as the part buttons: a locked
+    # selection in the dropdown is ignored and the current palette kept
+    # (game == null — e.g. legacy callers — means no gating, like part_unlocked).
     pal_w is ui.find_by_id of [_editor_root, "ed_palette"]
     if pal_w != null:
-        spec.palette is pal_w.selected
+        if (part_unlocked of [game, PART_TYPE_PALETTE, pal_w.selected]) != 0:
+            spec.palette is pal_w.selected
 
     shape_w is ui.find_by_id of [_editor_root, "ed_shape"]
     if shape_w != null:
