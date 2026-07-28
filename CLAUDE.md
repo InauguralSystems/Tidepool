@@ -45,49 +45,19 @@ before/after.
 
 ## Toolchain
 
-EigenScript is **not** vendored in this repo. You need its interpreter
-binary. To build it from source:
+EigenScript is **not** vendored in this repo; it lives in the sibling
+`../EigenScript` repo (override with `EIGS_DIR=`). **Minimum version
+v0.19.0** — the neural policy stores its weights/obs as flat shaped buffers
+(`buffer of [r, c]`, shaped `VAL_BUFFER` #275), which land there. (Background
+music needs `audio_music_*` from v0.18.0.) **CI and the devcontainer pin
+v0.33.0** via `.devcontainer/Dockerfile`'s `EIGS_REF` — build that ref for
+parity.
+
+The **Makefile** wraps the toolchain so you don't hand-manage the binary
+path. These work from any directory:
 
 ```bash
-# The neural policy needs the shaped VAL_BUFFER feature (#275), which lands in
-# v0.19.0; CI and the devcontainer pin a newer release via
-# .devcontainer/Dockerfile's EIGS_REF — build that for parity.
-EIGS_REF=$(grep -oP 'ARG EIGS_REF=\K.*' .devcontainer/Dockerfile)
-git clone --branch "$EIGS_REF" https://github.com/InauguralSystems/EigenScript.git
-cd EigenScript
-make build      # headless binary -> src/eigenscript  (no SDL2 needed)
-make gfx        # graphical binary for the playable game (dlopens SDL2 at run
-                # time — needs libsdl2-2.0-0 installed, but NO -dev headers to build)
-```
-
-- **Headless** (`make build`) is enough for all `test_*.eigs`,
-  `train.eigs`, and `eval_policy.eigs`.
-- **Graphical** (`make gfx` / `make install-gfx`) is required for
-  `tidepool.eigs` itself and `test_frametime.eigs` (they call `gfx_*`).
-- **Minimum EigenScript version is v0.19.0** — the neural policy stores its
-  weights/obs as flat shaped buffers (`buffer of [r, c]`, shaped `VAL_BUFFER`
-  #275), which land in v0.19.0. (Background music needs `audio_music_*` from
-  0.18.0; the older `spawn`/`recv_timeout`/`audio_play_loop` niceties are
-  v0.13.0.) **CI and the devcontainer pin v0.33.0** (`.devcontainer/Dockerfile`
-  `EIGS_REF`). The flat-buffer forward is ~7× faster than the old nested-list
-  form and the trainer's backprop ~1.8×, both byte-identical; `models/policy.txt`
-  stays format-compatible. Validated headless (regressions, obs-stacking,
-  game_tick, train pipeline).
-
-Run a script:
-
-```bash
-/path/to/EigenScript/src/eigenscript test_game.eigs
-```
-
-## Run / test / train / evaluate
-
-The **Makefile** wraps the toolchain so you don't hand-manage the EigenScript
-binary path (it lives in the sibling `../EigenScript` repo; override with
-`EIGS_DIR=`). These work from any directory:
-
-```bash
-make build   # build the headless EigenScript binary
+make build   # build the headless EigenScript binary (no SDL2 needed)
 make test    # headless suite (test_regressions, test_obs_stack, test_game, test_pacing)
 make lint    # parse-check every .eigs source
 make gfx     # build the graphical (SDL2) binary
@@ -95,57 +65,22 @@ make run     # play the game (needs gfx + a display)
 make shot    # headless screenshot -> docs/screenshot.png (needs xvfb + python3-PIL)
 ```
 
-`make shot` runs the gfx binary under Xvfb and converts the frame with
-`tools/xwd2png.py` — how the README screenshot is generated, and how to
-iterate on the renderer without a monitor. Training/eval are still run
-directly (below) since they take args.
-
-The raw commands, if you need them:
-
-```bash
-EIG=/path/to/EigenScript/src/eigenscript
-
-# Headless tests (fast, no SDL2):
-$EIG test_game.eigs          # 300-tick smoke sim
-$EIG test_regressions.eigs   # tier progression, torus wrap, collision, meat pool
-$EIG test_game_tick.eigs     # game_tick microbenchmark (n=5)
-$EIG test_obs_stack.eigs     # neural observation-stacking unit tests
-$EIG test_pacing.eigs        # fixed-timestep catch-up accumulator checks
-
-# Train the DQN policy (writes models/policy.txt):
-$EIG train.eigs --episodes 800 --seed 42
-
-# Continue training from the saved policy (chain toward convergence —
-# real convergence needs many thousands of episodes, not hundreds):
-$EIG train.eigs --episodes 800 --resume --eps-start 0.4
-
-# Evaluate trained vs hand-coded autopilot vs random (same world the
-# trainer uses, 40x20, so the comparison is apples-to-apples):
-$EIG eval_policy.eigs --seeds 20 --ticks 1000
-
-# Play (needs gfx binary + SDL2):
-$EIG tidepool.eigs
-```
+Headless is enough for every `test_*.eigs`, `train.eigs`, and
+`eval_policy.eigs`. The graphical binary is required for `tidepool.eigs`
+itself and `test_frametime.eigs`. Training/eval are run directly since they
+take args — see the neural rule (`.claude/rules/neural-training.md`).
 
 Always run `test_regressions.eigs` before committing game-logic changes.
 
-## Layout
+## Layout — the non-obvious parts
 
-| Path | Role |
-|---|---|
-| `tidepool.eigs` | Game entry point: menus, HUD, input, main loop (gfx) |
-| `train.eigs` | Standalone DQN trainer (replay buffer, target net, backprop) |
-| `eval_policy.eigs` | Policy evaluation harness (trained/autopilot/random) |
-| `src/game.eigs` | Core: physics, entities, collisions, combat, progression, autopilot, save/load. Largest file. |
-| `src/constants.eigs` | All tunable constants (world, physics, combat, action enums) |
-| `src/math_utils.eigs` | Torus distance/delta, angle helpers (hot path — inlined elsewhere) |
-| `src/entities.eigs` | Entity + creature-spec constructors, palettes, derived stats |
-| `src/neural.eigs` | MLP policy: forward pass, observation builder, frame stacking, save/load |
-| `src/renderer.eigs` | Renderer: creatures, particles, caustics, HUD, camera. Draws via the `draw_*` layer (not `gfx_*` directly), so frames are headless-inspectable. |
-| `src/draw.eigs` | Draw-list layer over the `gfx_*` primitives. Play mode: `draw_*` calls `gfx_*` directly. Record mode (`draw_record_begin`): captures each draw as `{op,a}` for headless inspection (`draw_ops`/`draw_op_count`/`draw_count_of`) — no SDL needed, like DMG's `--render-probe`. Only drawing primitives are wrapped; `gfx_present`/`gfx_poll`/window control stay direct. |
-| `src/editor.eigs` | In-game creature editor UI |
-| `src/audio.eigs` | Procedural audio synthesis |
-| `docs/`, `benchmarks/`, `GAPS.md` | Language requests, perf baselines, documented language gaps |
+(`ls src/` for the rest; the file names say what they hold.)
+
+- `src/math_utils.eigs` is hot path — its torus helpers are inlined at
+  per-tick call sites (see Performance).
+- The renderer never calls `gfx_*` directly; it goes through `src/draw.eigs`
+  so frames are headless-inspectable. Details:
+  `.claude/rules/rendering.md`.
 
 Load order matters: `game.eigs` loads `constants`, `math_utils`,
 `entities`. Load `game.eigs` **before** `neural.eigs`.
@@ -162,66 +97,21 @@ Load order matters: `game.eigs` loads `constants`, `math_utils`,
 - **Five scale tiers**, creature specs (body shape, pattern, sockets,
   appendages, spines), mutations bought with DNA, combat via appendages
   (poison clouds, electric bolts, jets) and spikes.
-- **Neural policy** (`src/neural.eigs`): obs is 107 features (player
-  state, nearest food/threat/meat, a 9×9 egocentric grid, global
-  summary), stacked over 4 frames + 5 aux = **433 inputs** →
-  MLP(64→32→**6 actions**). Actions: 0=none,1=thrust,2=left,3=right,
-  4=brake,**5=evolve**. The 5th aux feature is the evolve-eligibility flag
-  (`game.evolve_ready`), so the policy can perceive when evolving is
-  available and learn to time it. Movement + the evolve decision are
-  learned; **mutation-buying stays auto-piloted** (`autopilot_buy_mutation`
-  is still called for the policy each step). **Weights/obs are shaped flat
-  buffers** (`buffer of [r, c]`), so matmul/add/relu run on the flat `double[]`
-  with no per-call nested-list flatten (requires EigenScript #275); the forward
-  source is unchanged, byte-identical to the old nested-list form.
-- **DQN trainer** (`train.eigs`): epsilon-greedy with an *adaptive*
-  schedule (anneals start→end over ~60% of the run so the greedy policy
-  is actually exploited), target network, circular replay buffer, manual
-  backprop with gradient clipping. Reward in `compute_reward`: +10 per
-  food, **+5 per tier advanced (evolve)**, −20 on death, +0.01 survival,
-  plus **dense shaping** (±0.5 for closing/opening distance to the nearest
-  food) — without the shaping the signal is too sparse to learn from. The
-  death penalty for the harsher world a new tier summons is the
-  counter-pressure that makes *when* to evolve a real decision. Trains on a
-  denser 40×20 world (`tick_limit` 1000 so an episode can contain
-  eat→evolve→harder-world cycles).
-- **Checkpointing / resume (hardened for off-box runs):** `save_policy`
-  writes atomically (tmp + `rename`) so a crash can never corrupt
-  `models/policy.txt`, and serializes in O(n) via `join` (~0.2s vs the old
-  O(n²) ~36s). The saved policy is the *best* avg-score checkpoint, not the
-  final (DQN degrades late). `--resume` reloads the best weights **and**
-  `models/train_state.txt` (global episode + best-score bar), continues the
-  episode numbering, and **appends** to the learning curve instead of
-  clobbering it — so a chained multi-run effort reads as one curve. (The
-  replay buffer is not checkpointed; it refills. Pre-6-action policies are
-  incompatible — retrain from scratch.)
-- **Learning curve:** `models/train_log.csv` logs per 50-ep block
-  `ep,avg_score,avg_len,mean_tier,loss,mean_q,epsilon`. **`mean_tier` is the
-  headline signal** — tier only rises (one step per evolve), so mean tier ==
-  mean evolves/episode; watch it to see whether the policy is actually
-  learning to use the evolve action.
-- **Eval:** `eval_policy.eigs` reports score as **mean ± 95% CI** (over
-  `--seeds` seeds) for trained vs the autopilot (a strong baseline that
-  evolves eagerly when eligible) vs random, on the 40×20 world, so a gap can
-  be read as real or within noise. Also reports survival rate and avg tier.
 - **Combat is survivable** (`game_tick` predator-collision branch): a
   collision you lose deals an energy bite (scaled by the power gap, capped
   at 60) plus knockback and ~0.75s invulnerability (`invuln_timer`), not
   an instant kill. You die only when energy hits 0. Epic-cell collisions
   are still meant to be lethal hazards.
+- The neural policy, DQN trainer, checkpointing, and eval methodology live
+  in `.claude/rules/neural-training.md` (loads when you touch
+  `neural.eigs`/`train.eigs`/`eval_policy.eigs`).
 
-## EigenScript conventions (quick reference)
+## EigenScript conventions
 
-- Define: `define f(a, b) as:` — body is indented.
-- Call: single arg `f of x`; multiple args `f of [a, b, c]`;
-  zero args `f of null` (e.g. `new_policy of null`).
-- Assign: `x is expr`. Dict access: `d.key` or `d["key"]`.
-- Lists: `append of [list, val]`, `len of list`, `range of n`.
-- Control: `if/elif/else:`, `loop while cond:`, `for x in range of n:`,
-  `match expr:` / `case val:`, `continue`, `break`.
-- f-strings: `f"text {expr}"`.
-- v0.13.0+ niceties available: destructuring `[a, b] is rhs`, slicing
-  `a[start:end]`, negative indexing `a[-1]`, default params.
+Writing `.eigs` here? → the **`write-eigenscript`** skill (call syntax, the
+single-element-list spread trap, the outward-mutable scope model and when to
+use `local`). v0.13.0+ niceties are available: destructuring, slicing,
+negative indexing, default params.
 
 ## Physics & gameplay roadmap (known gaps)
 
@@ -266,40 +156,8 @@ This project targets slow hardware; `game_tick` is the hot path.
 - macOS Intel has the JIT live since EigenScript v0.15.2; Apple Silicon
   (arm64) is interpreter-only until the ARM64 JIT exists — performance work
   won't reproduce on Apple Silicon.
-- Score density depends on world size: on the big 60×30 world even the
-  autopilot eats <1 food per episode and deaths are rare, so it's a poor
-  training/eval signal. The trainer and `eval_policy.eigs` use a denser
-  40×20 world where autopilot (~3.8) clearly beats random (~1.3) and
-  deaths happen — that's the signal the AI learns from. Judge policies on
-  that world, not the default game world.
-- DQN training is noisy and slow on interpreted EigenScript (~3 s/episode
-  on this host). 800 episodes is a proof-of-life snapshot, not
-  convergence; expect to chain `--resume` runs across many thousands.
-- This is an **ephemeral container**: anything not committed (including
-  trained `models/policy.txt`) is lost when it's reclaimed. To persist a
-  long training effort, commit milestone policies with `git add -f`.
 
 ## Versioning & releasing
 
-Tidepool follows [SemVer](https://semver.org/); `VERSION` is the single source
-of truth (the game reports it via `eigenscript tidepool.eigs --version`, and the
-release workflow refuses to release a tag that disagrees with it).
-
-To cut a release:
-
-1. Move the `## [Unreleased]` block in `CHANGELOG.md` to `## [x.y.z] — YYYY-MM-DD`
-   (leave a fresh empty `[Unreleased]` above it).
-2. Bump `VERSION` to `x.y.z`.
-3. Commit (`release: vx.y.z`) and merge to `main`.
-4. **Actions ▸ Release ▸ Run workflow** (the `workflow_dispatch` path). It tags
-   `vx.y.z` from `VERSION`, builds a deterministic source archive
-   (`tidepool-vx.y.z.tar.gz` via `git archive`), writes `CHECKSUMS`, attaches a
-   Sigstore build-provenance attestation, and publishes a GitHub release whose
-   notes are the matching `CHANGELOG` section.
-
-Use the dispatch path rather than pushing a tag by hand: this environment's git
-proxy can't push tags, and a `GITHUB_TOKEN`-pushed tag wouldn't retrigger the
-workflow (same gotcha as EigenScript). Pushing a `v*` tag through a normal
-remote also works and triggers the same build. Verify a downloaded archive with
-`sha256sum -c CHECKSUMS` and
-`gh attestation verify tidepool-vx.y.z.tar.gz --repo InauguralSystems/Tidepool`.
+SemVer; `VERSION` is the single source of truth. Cutting a release → the
+**`release`** skill (`.claude/skills/release/`).
