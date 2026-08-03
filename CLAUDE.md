@@ -50,7 +50,7 @@ EigenScript is **not** vendored in this repo; it lives in the sibling
 v0.19.0** — the neural policy stores its weights/obs as flat shaped buffers
 (`buffer of [r, c]`, shaped `VAL_BUFFER` #275), which land there. (Background
 music needs `audio_music_*` from v0.18.0.) **CI and the devcontainer pin
-v0.34.0** via `.devcontainer/Dockerfile`'s `EIGS_REF` — build that ref for
+v0.35.1** via `.devcontainer/Dockerfile`'s `EIGS_REF` — build that ref for
 parity.
 
 The **Makefile** wraps the toolchain so you don't hand-manage the binary
