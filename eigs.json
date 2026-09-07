@@ -1,0 +1,6 @@
+{
+  "name": "tidepool",
+  "version": "0.1.0",
+  "description": "Spore-style cell-stage evolution game written entirely in EigenScript, with a from-scratch DQN trainer.",
+  "deps": {}
+}
