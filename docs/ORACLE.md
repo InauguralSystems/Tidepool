@@ -100,3 +100,51 @@ drift; draw-list structure does not.
    that only they carry — makes "harvest the part" a goal.
 5. Eyes as parts with a vision radius — the observation window the policy
    already has becomes a thing the player buys.
+
+## 6. The editor — Spore's Cell Editor and Thrive's Multicellular editor as references
+
+Two reference frames (shared by the maintainer 2026-09-20; described here,
+not committed — EA's and Revolutionary Games' images stay theirs; see the
+Spore wiki `Cell_Editor` and Thrive's `Multicellular_Stage` concept art):
+
+**Spore Cell Editor** (screenshot, "Karlets", Carnivore, 191 DNA): a
+three-column parts palette on the left (12 parts as icons: flagella, jaw,
+filter, proboscis, eyes ×3, spike, cilia, poison sac, electric, jet); the
+cell in the centre, top-down, on a lit concentric-ring petri dish over a
+blurred microscope backdrop; parts are placed **on the body** with mirrored
+symmetry (two eyes, two flagella, a claw at the front); build/paint tool tabs
+at the top; diet label with icon top-right; view/camera toggles right; name
+field, DNA counter, undo/redo, cancel/accept along the bottom. Everything is
+a picture; the only text is the name, the diet and the number.
+
+**Thrive Multicellular editor** (concept art): tabs Report / Patch Map /
+Editor; sub-tabs Structure / Membrane / Behaviour / …; parts placed on a
+**hex grid**; an **Organism Statistics** panel on the right (speed, HP,
+size, mass, ATP production vs consumption per process — every part has a
+cost the panel shows live); cells translucent with organelles visible; the
+progression frames show single cell → two joined → a colony with a
+"strategic shape" → cells sorted into coloured categories → a 3D organism
+with organs → parts added — captioned "still translucent". That last caption
+is Tidepool's identity too.
+
+**Tidepool's editor today** (`src/editor.eigs`, 334 lines, lib/ui): a
+`CREATURE EDITOR` title; a left `PARTS` panel of **text buttons** (one per
+part name); a centre `PREVIEW` panel with a custom-drawn cell; a right
+`PROPERTIES` panel of dropdowns/sliders (Palette, Shape, Segments, Pattern,
+Mouth); Done / Cancel. Part buttons toggle appendages on socket pairs
+(`spec.body_segments * 2` sockets); unlocks are bitmasks.
+
+| Reference | Tidepool | Gap |
+|---|---|---|
+| Parts are icons in a grid | text buttons in a column | needs an icon per part (the image path, EigenScript #1216, or procedural glyphs drawn with the part's own renderer) |
+| Parts placed by dragging onto the body, mirrored | toggle on/off per socket pair | placement as a spatial act — click a socket on the preview; mirror by default |
+| Live cost: DNA counter changes as you place; Thrive shows every stat live | properties apply on Done | a live stats strip (speed, sense, defence, DNA left) updated per change |
+| Cell drawn large, lit, on a dish; organelles visible | small preview | the preview IS the screen; light it; draw the inside |
+| Undo / redo | none | one-step undo at minimum |
+| Diet shown as a label + icon | Mouth dropdown | diet as an outcome of the mouth choice, shown, not selected |
+| Name field | none | a name is what makes it *your* cell |
+| Tabs for build vs paint (Spore) / Structure vs Membrane vs Behaviour (Thrive) | one page | paint (palette/pattern) separated from build |
+
+Order (smallest visible win first): live stats strip → click-to-place on
+the preview with mirroring → parts as glyphs → undo → name + diet badge →
+build/paint tabs.
