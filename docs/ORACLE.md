@@ -96,7 +96,12 @@ drift; draw-list structure does not.
   this box at full speed — that constraint is the distribution advantage,
   not a limitation to apologise for (maintainer, 2026-09-20). The min-spec
   claim in any README must be derived from a `test_frametime.eigs` run on
-  this machine, never typed.
+  this machine, never typed. And the pressure flows upstream: a frame
+  Tidepool cannot afford here is an EigenScript issue, not a Tidepool
+  workaround — `GAPS.md` GAP-004 (inner-loop call cost, found on this box)
+  is what forced the bytecode VM + JIT (v0.12.0) and the `nearest_in_range`
+  builtins. The potato makes the game work; the game makes the language
+  better (maintainer, 2026-09-20).
 
 ## 5. Suggested order (diff-and-beat: the smallest visible gap first)
 
