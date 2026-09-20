@@ -148,3 +148,48 @@ Mouth); Done / Cancel. Part buttons toggle appendages on socket pairs
 Order (smallest visible win first): live stats strip → click-to-place on
 the preview with mirroring → parts as glyphs → undo → name + diet badge →
 build/paint tabs.
+
+## 7. The modern oracles (2025–26) — Spore is 2008; the bar is what sells now
+
+Maintainer, 2026-09-20: "even Spore is outdated" — and "thrive". So the
+oracle set is re-ranked:
+
+**Primary — Thrive 1.0 (Revolutionary Games, Microbe Stage *complete*,
+December 2025; open source, GPL, Godot/C#, `github.com/Revolutionary-Games/Thrive`).**
+The look and the mechanics bar. It is readable source, not just
+screenshots: membrane rendering (shader-based, per membrane type), organelle
+placement on a hex grid, compound clouds coloured by type, patch map with
+population dots, terrain chunks with baked ambient occlusion, a live
+Organism Statistics panel, auto-evo that scores speed / turning / toxins /
+health / compound budgets, patch events (runoff, upwelling, dilution),
+sound tied to movement speed, graphics presets. Nine stages planned;
+Multicellular next (they estimate a year). §2 and §6 above are diffed
+against this game.
+
+**Pitch competitor — The Bibites: Digital Life (Steam Early Access since
+2025-03-04, $9.99, 96% positive of 218 reviews, one developer since 2017).**
+This is Tidepool's own pitch, on sale: creatures with **neural-network
+brains**, procedural appearance from genes, energy-conserving physics and
+metabolism, pheromones, natural selection in real time, an editor to
+engineer brains and genes by hand, family trees and population graphs,
+challenge levels against bosses with community leaderboards. Art is
+retro/pixel — *not* the visual bar. The diffs that matter:
+
+| The Bibites | Tidepool | Who wins |
+|---|---|---|
+| brains **evolve** (custom evolutionary algorithm, population-scale) | one brain **trained** (DQN, 433-feature obs) and the player plays alongside it | different claims; Tidepool's is playable, theirs is watchable — both are needed to "watch cells evolve their brains" (see §2: NPC bodies/brains evolving per run is the same machinery pointed outward) |
+| analysis tools: family tree, population stats, brain inspector | `train_log.csv`, `eval_policy` — off-screen | an in-game brain/lineage view is a feature they sell and we have the data for |
+| sandbox: tune physics/biology parameters | constants in `constants.eigs` | expose a few as in-game sliders (a "world" tab in the editor, §6) |
+| challenge levels + leaderboards | none | runs already have a score; a seeded challenge is one file |
+| deterministic replay | **byte-exact tape replay of a whole run** | Tidepool — nobody else can replay a run bit-for-bit or diff two policies on the same seed |
+
+**Also current, not oracles:** *Cell to Singularity* (idle/clicker, big
+2025 rework — different genre), *Species: ALRE* (observation-only sim),
+*Sporigins* (itch, Spore-cell homage, small). *Osmos* (2009) remains the
+reference for ambient minimalism in a cell game; *Ori* / *Hollow Knight* /
+*Abzû* for painterly bioluminescent light — the concept frame in §3 is in
+that register.
+
+Rule for this file: a look reference must be a game people are buying
+today; a mechanics reference may be older. Re-rank when Thrive's
+Multicellular ships.
