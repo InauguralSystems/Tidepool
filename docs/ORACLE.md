@@ -48,6 +48,14 @@ Thrive is the other axis: simulation over arcade.
 
 ## 3. What a screenshot must show — the oracle for #59
 
+The visual bar is a picture, not an adjective: `docs/concept-2026-09-20.png`
+(generated 2026-09-20 from the brief in this section's terms — same identity as
+today's `screenshot.png`, rendered as a modern game). Every renderer change is
+judged as a diff toward it.
+
+![Tidepool visual bar](concept-2026-09-20.png)
+
+
 A headless frame (`make shot`) of a mid-run tier-2 cell should contain, and a
 structural check can assert:
 
