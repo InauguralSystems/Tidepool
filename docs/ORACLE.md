@@ -87,6 +87,16 @@ drift; draw-list structure does not.
 - Starvation as a live cost (Thrive's osmoregulation, arcade-sized).
 - Everything is one language, headless-testable, deterministic under the
   tape — the oracle games cannot replay a run byte-exactly.
+- **The floor is a potato, so every player is above it.** Tidepool is
+  developed and gated on an ASUS X540NA — Intel Celeron N3350 @ 1.10 GHz,
+  2 cores, 3 GB usable RAM, integrated HD Graphics 500 — and
+  `benchmarks/BASELINE.md` is measured there (~1.7 ms/tick). The Bibites'
+  *minimum* is a Core i3 with 4 GB and it recommends an i5 with 8 GB; Thrive
+  is a Godot 3D game. Whatever "modern" look M9 buys must keep running on
+  this box at full speed — that constraint is the distribution advantage,
+  not a limitation to apologise for (maintainer, 2026-09-20). The min-spec
+  claim in any README must be derived from a `test_frametime.eigs` run on
+  this machine, never typed.
 
 ## 5. Suggested order (diff-and-beat: the smallest visible gap first)
 
