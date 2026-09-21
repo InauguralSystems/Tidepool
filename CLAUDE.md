@@ -35,8 +35,13 @@ Current priority order (set by the maintainer):
 1. **AI** — make the learned policy genuinely good (it's the unique asset).
 2. **Physics** — deepen the movement/energy/combat simulation.
 3. **Gameplay** — tighten the eat → grow → evolve loop and progression.
-4. **Graphics** — explicitly deferred as polish. Don't spend effort here
-   until the above are solid.
+4. **Graphics** — **no longer deferred (maintainer, 2026-09-20).** The
+   primitive look was the price of bootstrapping the language; the language
+   has grown and the look is now a ceiling. The bar is a picture:
+   `docs/concept-2026-09-20.png` (see `docs/ORACLE.md` §3). Route: the
+   runtime's gfx gaps first (EigenScript issue filed the same day — image
+   blit, additive blend, polygons/gradients, fonts), then the renderer;
+   keep the identity (translucent, glowing, dark pool).
 
 When physics/gameplay change, the AI must be retrained — those edits alter
 the environment the policy learned in. Sequence work as: land a
