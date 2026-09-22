@@ -20,7 +20,7 @@ Tidepool is a faithful homage to **Spore's cell stage** (Maxis): diet
 choice (herbivore/carnivore/omnivore), eat food and meat, spend DNA in
 the editor on parts (filter/jaw/proboscis mouths; fin/claw/cilia/poison/
 electric/jet appendages), grow through scale tiers via a deliberate evolve
-action (mate-calling is optional flavor — see the progression rework below),
+action (mate-calling is optional flavor — see Progression below),
 dodge giant "epic" cells. The systems are ported faithfully — it is not a
 loose tribute.
 
@@ -35,13 +35,12 @@ Current priority order (set by the maintainer):
 1. **AI** — make the learned policy genuinely good (it's the unique asset).
 2. **Physics** — deepen the movement/energy/combat simulation.
 3. **Gameplay** — tighten the eat → grow → evolve loop and progression.
-4. **Graphics** — **no longer deferred (maintainer, 2026-09-20).** The
-   primitive look was the price of bootstrapping the language; the language
-   has grown and the look is now a ceiling. The bar is a picture:
-   `docs/concept-2026-09-20.png` (see `docs/ORACLE.md` §3). Route: the
-   runtime's gfx gaps first (EigenScript issue filed the same day — image
-   blit, additive blend, polygons/gradients, fonts), then the renderer;
-   keep the identity (translucent, glowing, dark pool).
+4. **Graphics** — the primitive look was the price of bootstrapping the
+   language; the language has grown and the look is now a ceiling. The bar
+   is a picture: `docs/concept-2026-09-20.png` (see `docs/ORACLE.md` §3).
+   Route: the runtime's gfx gaps first (EigenScript#1216 — image blit,
+   additive blend, polygons/gradients, fonts), then the renderer; keep the
+   identity (translucent, glowing, dark pool).
 
 When physics/gameplay change, the AI must be retrained — those edits alter
 the environment the policy learned in. Sequence work as: land a
@@ -54,8 +53,8 @@ EigenScript is **not** vendored in this repo; it lives in the sibling
 `../EigenScript` repo (override with `EIGS_DIR=`). **Minimum version
 v0.19.0** — the neural policy stores its weights/obs as flat shaped buffers
 (`buffer of [r, c]`, shaped `VAL_BUFFER` #275), which land there. (Background
-music needs `audio_music_*` from v0.18.0.) **CI and the devcontainer pin
-v0.40.0** via `.devcontainer/Dockerfile`'s `EIGS_REF` — build that ref for
+music needs `audio_music_*` from v0.18.0.) **CI and the devcontainer pin the
+runtime** via `.devcontainer/Dockerfile`'s `EIGS_REF` — build that ref for
 parity.
 
 The **Makefile** wraps the toolchain so you don't hand-manage the binary
@@ -123,21 +122,21 @@ negative indexing, default params.
 Concrete, code-grounded opportunities, roughly ranked by impact-per-effort.
 These are the substance behind the "physics" and "gameplay" priorities.
 
-1. ~~**Two progression systems conflict**~~ — **RESOLVED 2026-06-25.**
-   Unified on one canonical gate: eating `FOOD_PER_TIER*(tier+1)` cumulative
-   food sets `game.evolve_ready`; a deliberate `ACTION_EVOLVE` (player key E
-   or policy action 5) runs `evolve_tier_up` (the rich species/predator
-   refresh) to advance one tier. No DNA cost, no mate requirement — the
-   cost is the harsher world it summons, so *when* to evolve is the
-   decision. `call_mate`/`update_mate` are now optional flavor.
-   `evolve_tier_up`'s dead epic-spawn was removed (`update_epic_cells`
-   handles it). Chosen over a pure mate-ritual gate because the policy is
-   the priority and a movement+evolve action space keeps the one off-box
-   training run tractable while letting the cell *learn* when to evolve.
-2. **Food is static and teleport-respawns** (`game_tick`, food-collision
+**Progression (settled design):** one canonical gate. Eating
+`FOOD_PER_TIER*(tier+1)` cumulative food sets `game.evolve_ready`; a
+deliberate `ACTION_EVOLVE` (player key E or policy action 5) runs
+`evolve_tier_up` (the rich species/predator refresh) to advance one tier.
+No DNA cost, no mate requirement — the cost is the harsher world it
+summons, so *when* to evolve is the decision. `call_mate`/`update_mate` are
+optional flavor; `update_epic_cells` owns epic spawning. Chosen over a pure
+mate-ritual gate because the policy is the priority and a movement+evolve
+action space keeps the one off-box training run tractable while letting the
+cell *learn* when to evolve.
+
+1. **Food is static and teleport-respawns** (`game_tick`, food-collision
    block sets a new random position). Letting food drift with the rotating
    water current would make the current matter and the pool feel alive.
-3. **Thin endgame** — progression caps at tier 5 (`SCALE_TIER_COUNT`) with
+2. **Thin endgame** — progression caps at tier 5 (`SCALE_TIER_COUNT`) with
    no graduation payoff. A real win state + escalating threat curve gives
    runs a point.
 
@@ -183,13 +182,14 @@ silently. Add to that: ask whether the thing you hit is a **law** of the
 language or an **earlier decision**. The tell is writing, or thinking,
 *"X must be true because the runtime does Y."*
 
-Bought 2026-08-28 (ouroboros#127 / DMG). The AOT compiles a program's main
-file but emits `load_file` as a runtime call, so loaded modules are
-interpreted by the linked VM. A real bug in that seam was found, minimised,
+Bought 2026-08-28 (ouroboros#127 / DMG). The AOT then compiled a program's
+main file but emitted `load_file` as a runtime call, so loaded modules were
+interpreted by the linked VM (since fixed, ouroboros#129 — the reasoning is
+the lesson, not the state). A real bug in that seam was found, minimised,
 fixed and verified — and reported as "unlocking the AOT multiplier for
 DMG". Measured on being challenged: DMG is 3,288 lines, 818 compiled and
 2,470 interpreted, including the 128-function opcode dispatch. Every
-emulated instruction runs interpreted, so the fix makes it *run* and cannot
+emulated instruction ran interpreted, so the fix made it *run* and could not
 make it *faster*. A whole investigation cycle had treated that design as
 terrain, and the capability to do it the other way already existed upstream
 for another purpose.
