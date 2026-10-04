@@ -377,16 +377,52 @@ editor_close of null
 print of "  editor palette unlock gating: ok"
 
 # ------------------------------------------------------------
-# Audio init hardening (#23) — on a runtime without the audio builtins
-# (this headless build is exactly that), audio_game_init must degrade to
-# silence instead of throwing undefined_name and taking down startup.
+# Audio init hardening (#23). The hosted default may include audio now:
+# compare ordinary initialization with the actual device capability, then
+# exercise missing-name lookup through the production catch wrappers.
 # ------------------------------------------------------------
-audio_game_init of null
-assert of [_audio_ready == 0, "audio stays un-ready without audio builtins"]
-audio_play_sound of "eat_plant"
-assert of [(audio_start_music of null) == 0, "music path still degrades gracefully"]
+audio_device_available is 0
+try:
+    audio_probe_device is audio_open of [AUDIO_RATE, AUDIO_CHANNELS]
+    if audio_probe_device != 0:
+        audio_device_available is 1
+        audio_close of null
+catch e:
+    assert of [e.kind == "undefined_name", "audio capability probe only tolerates missing builtins"]
 
-print of "  audio init degrades without builtins: ok"
+audio_game_init of null
+assert of [_audio_ready == audio_device_available, "ordinary audio initialization matches device availability"]
+if audio_device_available == 1:
+    assert of [(len of _sounds) == 11, "audio-present initialization prepares every sound"]
+    assert of [_ambient_samples != null, "audio-present initialization prepares ambient samples"]
+audio_play_sound of "eat_plant"
+audio_game_shutdown of null
+assert of [_audio_ready == 0, "audio shutdown clears readiness"]
+
+# Derive the fixture from the real module, changing only the two capability
+# lookup sites. The fixture names are actually unbound; no error is fabricated
+# and the production try/catch bodies are unchanged. This control runs even
+# when the runtime has audio and a dummy device is available.
+audio_source is read_text of "src/audio.eigs"
+assert of [(len of (split of [audio_source, "audio_open of"])) == 2, "missing-audio fixture owns exactly one open lookup"]
+assert of [(len of (split of [audio_source, "audio_music_play of"])) == 2, "missing-music fixture owns exactly one play lookup"]
+audio_missing_source is str_replace of [audio_source, "audio_open of", "_tidepool_absent_audio_open of"]
+audio_missing_source is str_replace of [audio_missing_source, "audio_music_play of", "_tidepool_absent_music_play of"]
+eval of audio_missing_source
+audio_missing_kind is ""
+try:
+    eval of "_tidepool_absent_audio_open of null"
+catch e:
+    audio_missing_kind is e.kind
+assert of [audio_missing_kind == "undefined_name", "fixture really has no audio-open binding"]
+audio_game_init of null
+assert of [_audio_ready == 0, "missing audio capability leaves initialization un-ready"]
+assert of [(len of _sounds) == 0, "missing audio capability prepares no sounds"]
+audio_play_sound of "eat_plant"
+assert of [(audio_start_music of null) == 0, "missing music capability degrades gracefully"]
+eval of audio_source
+
+print of "  audio present/absent capability controls: ok"
 
 # ------------------------------------------------------------
 # Game-over hint (#19) — the overlay must advertise only the keys the

@@ -38,7 +38,7 @@ define generate_sweep(freq_start, freq_end, duration, volume, waveform) as:
     return audio_envelope of [samples, 0.001, duration * 0.9, 0.1, duration * 0.09]
 
 # Wrapped in try/catch (mirroring audio_start_music) so a runtime without
-# the audio builtins — e.g. the default headless EigenScript build, where
+# the audio builtins — e.g. an older headless EigenScript build, where
 # audio_open throws a catchable {"kind": "undefined_name"} — can't take
 # down startup. The game runs silent, saying so loudly (same probe-first
 # pattern as DeslanStudio's sink_audio_new).
