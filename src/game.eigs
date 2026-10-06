@@ -474,7 +474,7 @@ define game_tick(game) as:
                     # Wander timer: only re-evaluate targets periodically
                     pred.wander_timer is pred.wander_timer - 1
                     needs_retarget is pred.wander_timer <= 0
-                    if needs_retarget == 1:
+                    if needs_retarget:
                         pred.target_angle is rand_range_f of [0 - PI, PI]
                         pred.wander_timer is random_int of [30, 90]
 
@@ -490,7 +490,7 @@ define game_tick(game) as:
                             pred.target_angle is atan2 of [0 - pdy, 0 - pdx]
 
                     # Expensive searches only on retarget (food seek, NPC hunt, flocking)
-                    if needs_retarget == 1:
+                    if needs_retarget:
                         if sp_diet == MOUTH_FILTER or sp_diet == MOUTH_PROBOSCIS:
                             # Seek nearest food (batch C builtin)
                             nf is nearest_in_range of [game.food, pred.px, pred.py, 8.0, ww, wh]
@@ -1517,7 +1517,7 @@ define save_creature(spec) as:
     return 1
 
 define load_creature(spec) as:
-    if file_exists of "saves/creature_profile.txt" == 0:
+    if not (file_exists of "saves/creature_profile.txt"):
         return 0
     text is read_text of "saves/creature_profile.txt"
     if (len of text) == 0:

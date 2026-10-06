@@ -509,11 +509,11 @@ mkdir of "models"
 # (so a chained multi-run effort reads as one continuous curve). On a fresh
 # run, start the curve with a header.
 log_buf is "ep,avg_score,avg_len,mean_tier,loss,mean_q,epsilon\n"
-if hp.resume == 1 and (file_exists of STATE_PATH) == 1:
+if hp.resume == 1 and (file_exists of STATE_PATH):
     st is split of [read_text of STATE_PATH, "\n"]
     ep_offset is floor of (num of st[0])
     best_avg_score is num of st[1]
-    if (file_exists of LOG_PATH) == 1:
+    if (file_exists of LOG_PATH):
         log_buf is read_text of LOG_PATH
     print of f"Resumed training state: ep_offset={ep_offset}, best_avg_score={best_avg_score}"
 else:

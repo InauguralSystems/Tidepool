@@ -8,7 +8,7 @@ STEP is 1000.0 / 60.0
 fails is 0
 
 define check(label, ok) as:
-    if ok == 1:
+    if ok:
         print of f"  ok: {label}"
     else:
         print of f"  FAIL: {label}"
