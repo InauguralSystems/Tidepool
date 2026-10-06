@@ -1,7 +1,7 @@
 # Test SDL2 graphics — opens a window, draws shapes, waits for quit
 
 result is gfx_open of [800, 600, "Tidepool - EigenScript Graphics Test"]
-if result == 0:
+if not result:
     print of "Failed to open window"
     return null
 

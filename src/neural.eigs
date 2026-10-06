@@ -510,7 +510,7 @@ define _unflatten_weights(flat) as:
     return policy
 
 define load_policy() as:
-    if file_exists of POLICY_PATH == 0:
+    if not (file_exists of POLICY_PATH):
         return null
     text is read_text of POLICY_PATH
     if (len of text) == 0:
