@@ -24,9 +24,9 @@ RUN apt-get update \
 # Full EigenScript source at a pinned ref; build the gfx variant. SDL2 is
 # dlopen'd at runtime, so building gfx needs no -dev headers — only libsdl2 to
 # *run* it. eigenscript resolves its stdlib relative to the binary (../lib).
-# EIGS_REF is a tag/SHA (fetched directly, so it stays reproducible). Pinned to
-# v0.19.0 — the release that ships the flat-buffer tensors (shaped VAL_BUFFER,
-# #275) the neural policy's buffer path requires.
+# EIGS_REF is a tag/SHA (fetched directly, so it stays reproducible). The neural
+# policy's buffer path needs v0.19.0 or later for flat-buffer tensors (shaped
+# VAL_BUFFER, #275).
 ARG EIGS_REF=v0.47.0
 RUN mkdir -p /opt/eigenscript && cd /opt/eigenscript && git init -q \
  && git remote add origin https://github.com/InauguralSystems/EigenScript.git \
