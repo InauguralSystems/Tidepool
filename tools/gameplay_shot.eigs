@@ -11,8 +11,14 @@ i is 0
 loop while i < 150:
     autopilot_decide of game
     game_tick of game
-    render_game of [game, 800, 600]
-    gfx_present of null
+    i is i + 1
+
+# Render exactly tick 150 once, then hold that immutable frame. Capturing a
+# continuously animated frame makes Xvfb timing part of the screenshot.
+render_game of [game, 800, 600]
+gfx_present of null
+i is 0
+loop while i < 250:
     gfx_poll of null
     gfx_delay of 22
     i is i + 1

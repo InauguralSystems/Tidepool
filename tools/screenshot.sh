@@ -18,8 +18,8 @@ W="${W:-800}"
 H="${H:-600}"
 DISP=":99"
 
-command -v Xvfb >/dev/null || { echo "screenshot: need Xvfb (apt install xvfb)" >&2; exit 1; }
-command -v xwd  >/dev/null || { echo "screenshot: need xwd (apt install x11-apps)" >&2; exit 1; }
+command -v Xvfb >/dev/null || { echo "PREREQ MISSING: display tooling (Xvfb)" >&2; exit 2; }
+command -v xwd  >/dev/null || { echo "PREREQ MISSING: display tooling (xwd)" >&2; exit 2; }
 
 here="$(cd "$(dirname "$0")" && pwd)"
 tmp="$(mktemp -d)"
@@ -30,9 +30,19 @@ sleep 1
 Xvfb "$DISP" -screen 0 "${W}x${H}x24" >/dev/null 2>&1 &
 XPID=$!
 sleep 1
-DISPLAY="$DISP" "$EIG" "$HARNESS" >/dev/null 2>&1 &
+DISPLAY="$DISP" "$EIG" "$HARNESS" >"$tmp/game.log" 2>&1 &
 GPID=$!
 sleep 2
+if ! kill -0 "$GPID" 2>/dev/null; then
+    wait "$GPID" || rc=$?
+    if grep -qE "unavailable in this build|undefined variable 'gfx_" "$tmp/game.log"; then
+        echo "PREREQ MISSING: gfx build (gfx builtins unavailable)" >&2
+        exit 2
+    fi
+    echo "GFX INFRASTRUCTURE FAILURE: renderer exited before capture (status ${rc:-0})" >&2
+    cat "$tmp/game.log" >&2
+    exit 1
+fi
 DISPLAY="$DISP" xwd -root -out "$tmp/frame.xwd" 2>/dev/null
 python3 "$here/xwd2png.py" "$tmp/frame.xwd" "$OUT"
 echo "screenshot: wrote $OUT"

@@ -63,6 +63,7 @@ make run      # build the graphical binary and play
 make test     # build the headless binary and run the test suite
 make lint     # parse-check every source
 make shot     # regenerate the gameplay screenshot headless (needs xvfb)
+make acceptance # CI/consumer contract: lint + tests + real gfx oracle
 ```
 
 Or run directly: `/path/to/EigenScript/src/eigenscript tidepool.eigs`.
@@ -103,7 +104,8 @@ New here? The [**good first issues**](https://github.com/InauguralSystems/Tidepo
 are small, self-contained tasks with the exact file, the fix, and acceptance
 criteria spelled out — a good place to start.
 
-Build and test with `make test` / `make lint`. The repo doubles as a real-world
+Build and test with `make acceptance` (the CI and EigenScript consumer-wave
+contract). The repo doubles as a real-world
 EigenScript stress test — language gaps found during development are tracked in
 [GAPS.md](GAPS.md) and driven upstream. See [CONTRIBUTING.md](CONTRIBUTING.md).
 

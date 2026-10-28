@@ -4,8 +4,8 @@ name: tests
 # EigenScript source tree pinned by .devcontainer/Dockerfile's EIGS_REF (with
 # EIGS_DIR/PATH baked in) and builds the gfx variant, so the SAME image a
 # Codespace opens — where `make run`/`make shot` render the game — is what CI
-# runs the headless suite in. The gfx entry points still aren't executed here;
-# `make lint` parse-checks every source, `make test` runs the headless suite.
+# runs acceptance in. The display-dependent oracle has its own job so the
+# portable headless suite remains display/toolchain independent.
 
 on:
   push:
@@ -29,3 +29,14 @@ jobs:
             set -e
             make lint
             make test
+
+  gfx-oracle:
+    name: gfx oracle (in devcontainer)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run real-surface acceptance oracle
+        uses: devcontainers/ci@v0.3
+        with:
+          runCmd: make gfx-oracle
