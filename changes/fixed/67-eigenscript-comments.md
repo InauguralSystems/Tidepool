@@ -1,0 +1,1 @@
+- Clarified EigenScript runtime requirement and observer-suppression comments without changing game behavior (#67, #37).

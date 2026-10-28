@@ -339,7 +339,10 @@ define game_tick(game) as:
     clear_events of game
     game.tick is game.tick + 1
 
-    # Physics — no observation needed, pure numeric mutation
+    # Physics — suppress observer bookkeeping for the named locals below and
+    # inside called functions. The game.* writes are never observer-recorded
+    # and their numeric fields mutate in place regardless of this block; the
+    # old allocation fast path that required unobserved no longer exists.
     unobserved:
         # Water current rotation
         game.current_angle is game.current_angle + CURRENT_ROTATE_RATE * SIM_DT
@@ -441,7 +444,10 @@ define game_tick(game) as:
             if pred.stunned_timer > 0:
                 pred.stunned_timer is pred.stunned_timer - 1
 
-            # Diet-driven AI + boid flocking — unobserved for performance
+            # Diet-driven AI + boid flocking — suppress observer bookkeeping
+            # for the named locals below and inside called functions. The
+            # pred.* writes neither gain observer suppression nor rely on this
+            # block for in-place numeric mutation.
             unobserved:
                 if pred.stunned_timer <= 0:
                     sp is game.species[pred.species_id]
