@@ -8,7 +8,10 @@ from PIL import Image
 
 
 def main(path: str) -> int:
-    pixels = list(Image.open(path).convert("RGB").get_flattened_data())
+    # tobytes() exists in every Pillow; get_flattened_data() is only in recent
+    # releases and failed in the devcontainer's older Pillow (Tidepool#76 CI).
+    raw = Image.open(path).convert("RGB").tobytes()
+    pixels = [tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)]
     colours = Counter(pixels)
     dominant, dominant_count = colours.most_common(1)[0]
     ink = len(pixels) - dominant_count
