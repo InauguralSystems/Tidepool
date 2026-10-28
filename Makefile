@@ -19,7 +19,7 @@ EIG      := $(EIGS_DIR)/src/eigenscript
 HARNESS ?= tools/gameplay_shot.eigs
 OUT     ?= docs/screenshot.png
 
-.PHONY: all build gfx test lint run shot clean help
+.PHONY: all build gfx test lint run shot gfx-oracle acceptance clean help
 .DEFAULT_GOAL := help
 
 # Always (re)build the headless EigenScript binary.
@@ -65,6 +65,13 @@ run: gfx
 shot: gfx
 	tools/screenshot.sh "$(EIG)" "$(HARNESS)" "$(OUT)"
 
+# Player-visible acceptance: draw-list semantics plus a real Xvfb pixel frame.
+gfx-oracle: gfx
+	tools/gfx_oracle.sh "$(EIG)"
+
+# Documented consumer/release-wave acceptance command.
+acceptance: lint test gfx-oracle
+
 clean:
 	rm -f *.log
 	rm -rf models saves
@@ -77,4 +84,6 @@ help:
 	@echo "  make lint    parse-check every source"
 	@echo "  make run     play the game (needs gfx + a display)"
 	@echo "  make shot    headless screenshot (needs xvfb + python3-PIL); HARNESS=, OUT="
+	@echo "  make gfx-oracle  verify renderer structure and a real Xvfb frame"
+	@echo "  make acceptance lint + headless tests + gfx oracle (CI contract)"
 	@echo "  make clean   remove generated models/, saves/, *.log"

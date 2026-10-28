@@ -1,0 +1,77 @@
+# Deterministic draw-list fixture for the gfx acceptance oracle (#59).
+load_file of "src/game.eigs"
+load_file of "src/renderer.eigs"
+
+game is new_game of [40.0, 20.0, 42]
+
+# Put one food and predator in named screen regions. This makes the oracle
+# classify entities rather than accepting unrelated circles elsewhere.
+food is game.food[0]
+food.px is game.px - 5.0
+food.py is game.py
+food.active is 1
+pred is game.predators[0]
+pred.px is game.px + 5.0
+pred.py is game.py
+pred.active is 1
+
+draw_record_begin of null
+render_game of [game, 800, 600]
+ops is draw_ops of null
+
+player is 0
+food_seen is 0
+predator is 0
+score is 0
+dna is 0
+tier is 0
+energy is 0
+
+for i in range of (len of ops):
+    op is ops[i]
+    if op.op == "circle":
+        x is op.a[0]
+        y is op.a[1]
+        # Player is camera-centred; forced food/predator are left/right.
+        if x > 380 and x < 420 and y > 250 and y < 290:
+            player is player + 1
+        if x > 260 and x < 320 and y > 250 and y < 290:
+            food_seen is food_seen + 1
+        if x > 480 and x < 540 and y > 240 and y < 300:
+            predator is predator + 1
+    elif op.op == "text":
+        if op.a[2] == "Score 0":
+            score is 1
+        elif op.a[2] == "DNA 0":
+            dna is 1
+        elif op.a[2] == "Tier 0":
+            tier is 1
+        elif op.a[2] == "Energy 100":
+            energy is 1
+
+failed is 0
+if player < 1:
+    print of "GFX ORACLE MISMATCH: player circle"
+    failed is 1
+if food_seen < 1:
+    print of "GFX ORACLE MISMATCH: food draw"
+    failed is 1
+if predator < 1:
+    print of "GFX ORACLE MISMATCH: predator draw"
+    failed is 1
+if score == 0:
+    print of "GFX ORACLE MISMATCH: HUD Score"
+    failed is 1
+if dna == 0:
+    print of "GFX ORACLE MISMATCH: HUD DNA"
+    failed is 1
+if tier == 0:
+    print of "GFX ORACLE MISMATCH: HUD Tier"
+    failed is 1
+if energy == 0:
+    print of "GFX ORACLE MISMATCH: HUD Energy"
+    failed is 1
+
+if failed == 1:
+    exit of 1
+print of f"GFX ORACLE PASS: draw-list player={player} food={food_seen} predator={predator} HUD=4"

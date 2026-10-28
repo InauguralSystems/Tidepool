@@ -83,7 +83,13 @@ define draw_caustics(screen_w, game_h, tick) as:
             py is y_base + (sin of (px * 0.03 + tick * 0.04 + i)) * 8
             px2 is px + 8
             py2 is y_base + (sin of (px2 * 0.03 + tick * 0.04 + i)) * 8
-            draw_line of [px, floor of py, px2, floor of py2, 45, 80, 105, ca]
+            # gfx_line has no alpha argument. Blend the shimmer toward the
+            # ocean colour here instead of passing an invalid eighth value.
+            blend is ca / 255.0
+            cr is floor of (BG_R + (45 - BG_R) * blend)
+            cg is floor of (BG_G + (80 - BG_G) * blend)
+            cb is floor of (BG_B + (105 - BG_B) * blend)
+            draw_line of [px, floor of py, px2, floor of py2, cr, cg, cb]
 
 # ============================================================
 # Particle system — lightweight effect particles

@@ -17,6 +17,7 @@ RUN apt-get update \
         git \
         libsdl2-2.0-0 \
         xvfb \
+        x11-apps \
         python3 \
         python3-pil \
  && rm -rf /var/lib/apt/lists/*

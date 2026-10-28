@@ -1,0 +1,1 @@
+- CI now rejects structural rendering regressions and blank real gfx frames through the documented acceptance command (#59).
