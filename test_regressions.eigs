@@ -377,9 +377,8 @@ editor_close of null
 print of "  editor palette unlock gating: ok"
 
 # ------------------------------------------------------------
-# Audio init hardening (#23). The hosted default may include audio now:
-# compare ordinary initialization with the actual device capability, then
-# exercise missing-name lookup through the production catch wrappers.
+# Audio channel lifecycle (#81). The hosted default may include audio now:
+# compare ordinary initialization with actual device capability first.
 # ------------------------------------------------------------
 audio_device_available is 0
 try:
@@ -395,34 +394,53 @@ assert of [_audio_ready == audio_device_available, "ordinary audio initializatio
 if audio_device_available == 1:
     assert of [(len of _sounds) == 11, "audio-present initialization prepares every sound"]
     assert of [_ambient_samples != null, "audio-present initialization prepares ambient samples"]
+    assert of [_ambient_channel != 0, "audio-present initialization starts one ambient loop"]
 audio_play_sound of "eat_plant"
 audio_game_shutdown of null
 assert of [_audio_ready == 0, "audio shutdown clears readiness"]
 
-# Derive the fixture from the real module, changing only the two capability
-# lookup sites. The fixture names are actually unbound; no error is fabricated
-# and the production try/catch bodies are unchanged. This control runs even
-# when the runtime has audio and a dummy device is available.
+# Evaluate the production module with recorded persistent-channel calls. This
+# is independent of an audio device and proves repeated frames update one
+# danger channel rather than queueing a newly scaled clip each time.
+audio_loop_calls is 0
+audio_volume_calls is 0
+audio_stop_calls is 0
+define record_audio_play_loop(args) as:
+    audio_loop_calls is audio_loop_calls + 1
+    return 7
+define record_audio_volume(args) as:
+    audio_volume_calls is audio_volume_calls + 1
+    return 1
+define record_audio_stop(channel) as:
+    audio_stop_calls is audio_stop_calls + 1
+    return 1
+
 audio_source is read_text of "src/audio.eigs"
-assert of [(len of (split of [audio_source, "audio_open of"])) == 2, "missing-audio fixture owns exactly one open lookup"]
-assert of [(len of (split of [audio_source, "audio_music_play of"])) == 2, "missing-music fixture owns exactly one play lookup"]
-audio_missing_source is str_replace of [audio_source, "audio_open of", "_tidepool_absent_audio_open of"]
-audio_missing_source is str_replace of [audio_missing_source, "audio_music_play of", "_tidepool_absent_music_play of"]
-eval of audio_missing_source
-audio_missing_kind is ""
-try:
-    eval of "_tidepool_absent_audio_open of null"
-catch e:
-    audio_missing_kind is e.kind
-assert of [audio_missing_kind == "undefined_name", "fixture really has no audio-open binding"]
-audio_game_init of null
-assert of [_audio_ready == 0, "missing audio capability leaves initialization un-ready"]
-assert of [(len of _sounds) == 0, "missing audio capability prepares no sounds"]
-audio_play_sound of "eat_plant"
-assert of [(audio_start_music of null) == 0, "missing music capability degrades gracefully"]
+audio_recording_source is str_replace of [audio_source, "audio_play_loop of", "record_audio_play_loop of"]
+audio_recording_source is str_replace of [audio_recording_source, "audio_volume of", "record_audio_volume of"]
+audio_recording_source is str_replace of [audio_recording_source, "audio_stop of", "record_audio_stop of"]
+eval of audio_recording_source
+dict_set of [_sounds, "danger", [0.1, 0.2]]
+_audio_ready is 1
+audio_game is new_game of [60.0, 20.0, 42]
+audio_game.sense_level is 1
+for i in range of (len of audio_game.predators):
+    audio_game.predators[i].active is 0
+audio_game.predators[0].active is 1
+audio_game.predators[0].px is audio_game.px
+audio_game.predators[0].py is audio_game.py
+audio_game_update of audio_game
+audio_game_update of audio_game
+print of f"audio log: loops={audio_loop_calls} volumes={audio_volume_calls} stops={audio_stop_calls}"
+assert of [audio_loop_calls == 1, "danger channel starts once across dangerous frames"]
+assert of [audio_volume_calls == 2, "danger channel volume updates live each frame"]
+audio_game.predators[0].active is 0
+audio_game_update of audio_game
+assert of [audio_stop_calls == 1, "danger channel stops when danger clears"]
+assert of [_danger_channel == 0, "cleared danger forgets the stopped channel"]
 eval of audio_source
 
-print of "  audio present/absent capability controls: ok"
+print of "  audio persistent channel lifecycle: ok"
 
 # ------------------------------------------------------------
 # Game-over hint (#19) — the overlay must advertise only the keys the

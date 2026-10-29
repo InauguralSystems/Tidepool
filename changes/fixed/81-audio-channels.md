@@ -1,0 +1,1 @@
+- Audio ambience and danger now use persistent mixer channels instead of per-frame polling and sample allocation (#81).

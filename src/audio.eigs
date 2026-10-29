@@ -4,9 +4,6 @@
 # ============================================================
 # Ported from sporelike-c/src/audio.c
 # All sounds generated at init using EigenScript audio builtins.
-# GAP: No frequency sweep builtin — C version sweeps continuously,
-#      we approximate with short chained tones at stepped frequencies.
-# GAP: No loop playback — ambient must be re-queued manually.
 
 AUDIO_RATE is 22050
 AUDIO_CHANNELS is 1
@@ -17,11 +14,13 @@ MUSIC_VOLUME is 50
 _sounds is {}
 _audio_ready is 0
 _ambient_samples is null
+_ambient_channel is 0
+_danger_channel is 0
 
 # Start the looping background music (streamed via the runtime's audio_music_*
-# builtins, separate from the SFX device). Wrapped in try/catch so the game
-# still runs without music on a runtime that predates those builtins
-# (EigenScript < 0.18.0) or if the asset is missing.
+# builtins, separate from the SFX device). Device and asset failures are
+# reported by the builtin's false return. Only its real IO error is handled;
+# programmer errors retain their kind and propagate.
 define audio_start_music() as:
     try:
         ok is audio_music_play of [MUSIC_PATH, 0 - 1]
@@ -29,7 +28,10 @@ define audio_start_music() as:
             audio_music_volume of MUSIC_VOLUME
         return ok
     catch e:
-        return 0
+        if e.kind == "io":
+            print of f"Audio: music IO failed — {e.message}"
+            return 0
+        throw of e
 
 # Generate a frequency sweep with decay envelope.
 # Uses the audio_sweep builtin for continuous phase sweep.
@@ -37,25 +39,7 @@ define generate_sweep(freq_start, freq_end, duration, volume, waveform) as:
     samples is audio_sweep of [freq_start, freq_end, duration, volume, waveform]
     return audio_envelope of [samples, 0.001, duration * 0.9, 0.1, duration * 0.09]
 
-# Wrapped in try/catch (mirroring audio_start_music) so a runtime without
-# the audio builtins — e.g. an older headless EigenScript build, where
-# audio_open throws a catchable {"kind": "undefined_name"} — can't take
-# down startup. The game runs silent, saying so loudly (same probe-first
-# pattern as DeslanStudio's sink_audio_new).
 define audio_game_init() as:
-    try:
-        return audio_game_init_unsafe of null
-    catch e:
-        _audio_ready is 0
-        local reason is "init failed"
-        if (type of e) == "dict":
-            if has_key of [e, "kind"]:
-                if e["kind"] == "undefined_name":
-                    reason is "no audio builtins in this build"
-        print of f"Audio: {reason} — running silent"
-        return null
-
-define audio_game_init_unsafe() as:
     dev is audio_open of [AUDIO_RATE, AUDIO_CHANNELS]
     if dev == 0:
         print of "Audio: failed to open device"
@@ -86,8 +70,8 @@ define audio_game_init_unsafe() as:
     dict_set of [_sounds, "tier_up", generate_sweep of [300, 900, 0.4, 0.7, 0]]
 
     # Ambient: filtered noise loop, 2 seconds, low volume
-    # GAP: No loop playback — we re-queue when buffer runs low
     _ambient_samples is audio_gain of [audio_noise of [2.0, 0.3], 0.15]
+    _ambient_channel is audio_play_loop of [_ambient_samples, 0 - 1]
 
     _audio_ready is 1
     print of "Audio: initialized"
@@ -99,7 +83,7 @@ define audio_play_sound(name) as:
         audio_play of _sounds[name]
 
 # Check game event flags and play corresponding sounds.
-# Also handles ambient loop re-queuing and danger proximity audio.
+# Also handles danger proximity audio.
 define audio_game_update(game) as:
     if _audio_ready != 1:
         return null
@@ -126,15 +110,8 @@ define audio_game_update(game) as:
     if game.event_jet == 1:
         audio_play_sound of "jet"
 
-    # Ambient loop: re-queue when buffer is running low
-    # GAP: No native loop playback — polling queue size as workaround
-    if _ambient_samples != null:
-        queued is audio_queue_size of null
-        if queued < AUDIO_RATE * 2:
-            audio_play of _ambient_samples
-
     # Danger proximity audio: play danger tone when threat is near
-    # GAP: No per-channel volume control — we pre-scale the buffer
+    danger_volume is 0.0
     if game.game_over != 1:
         sense is creature_sense_range of [game.creature, game.sense_level]
         nearest_dist is 999.0
@@ -146,15 +123,25 @@ define audio_game_update(game) as:
                     nearest_dist is d
         if nearest_dist < sense and sense > 0:
             proximity is 1.0 - nearest_dist / sense
-            vol is proximity * 0.6
-            if vol > 0.05:
-                danger_scaled is audio_gain of [_sounds["danger"], vol]
-                # Only play if not already queued heavily
-                queued is audio_queue_size of null
-                if queued < AUDIO_RATE * 4:
-                    audio_play of danger_scaled
+            danger_volume is proximity * 0.6
+
+    if danger_volume > 0.05:
+        if _danger_channel == 0:
+            _danger_channel is audio_play_loop of [_sounds["danger"], 0 - 1]
+        if _danger_channel != 0:
+            audio_volume of [_danger_channel, danger_volume]
+    else:
+        if _danger_channel != 0:
+            audio_stop of _danger_channel
+            _danger_channel is 0
 
 define audio_game_shutdown() as:
     if _audio_ready == 1:
+        if _danger_channel != 0:
+            audio_stop of _danger_channel
+        if _ambient_channel != 0:
+            audio_stop of _ambient_channel
+        _danger_channel is 0
+        _ambient_channel is 0
         audio_close of null
         _audio_ready is 0
