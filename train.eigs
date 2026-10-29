@@ -517,6 +517,7 @@ recent_tiers is []
 loss_sum is 0.0
 q_sum is 0.0
 train_step_count is 0
+total_train_steps is 0
 
 LOG_PATH is "models/train_log.csv"
 STATE_PATH is "models/train_state.txt"
@@ -617,6 +618,7 @@ for ep in range of hp.episodes:
                 last_check_loss is step_out[0]
                 q_sum is q_sum + step_out[1]
                 train_step_count is train_step_count + 1
+                total_train_steps is total_train_steps + 1
 
         # Update target network periodically
         if step_count % hp.target_update == 0:
@@ -706,8 +708,8 @@ print of f"Best policy saved to {POLICY_PATH}"
 # an improving fixed-seed run. Keep this after training so it checks production.
 if hp.training_check == 1:
     check_ok is 1
-    if train_step_count < 3:
-        print of f"FAIL: optimizer steps {train_step_count} < 3"
+    if total_train_steps < 3:
+        print of f"FAIL: optimizer steps {total_train_steps} < 3"
         check_ok is 0
     if last_check_loss != last_check_loss or last_check_loss > 1000000000.0:
         print of f"FAIL: non-finite loss {last_check_loss}"
@@ -720,4 +722,4 @@ if hp.training_check == 1:
         check_ok is 0
     if check_ok == 0:
         exit of 1
-    print of f"Training smoke passed: steps={train_step_count} loss={first_check_loss}->{last_check_loss}"
+    print of f"Training smoke passed: steps={total_train_steps} loss={first_check_loss}->{last_check_loss}"
