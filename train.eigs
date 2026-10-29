@@ -116,11 +116,9 @@ define stack_obs(obs_list) as:
     m is buffer of [bs, cols]
     for r in range of bs:
         row is obs_list[r]
-        if (type of row) != "buffer":
-            row is row[0]
         base is r * cols
         for c in range of cols:
-            m[base + c] is buf_get of [row, c]
+            m[base + c] is row[c]
     return m
 
 # z[r,c] = pre[r,c] + bias[c] — broadcast a 1-D bias over batch rows. The VM
@@ -137,13 +135,6 @@ define add_bias(pre, bias, rows, cols) as:
 # Replay buffer (circular)
 # ============================================================
 
-# `append of [list, buffer]` treats the buffer as append's argument envelope on
-# affected EigenScript releases. Grow the list with a scalar placeholder, then
-# assign the buffer as one element so replay remains a list of 1-D buffers.
-define append_buffer(lst, value) as:
-    append of [lst, 0]
-    lst[(len of lst) - 1] is value
-
 define new_buffer(capacity) as:
     return {
         "obs": buffer of (capacity * NEURAL_INPUT_SIZE),
@@ -157,15 +148,16 @@ define new_buffer(capacity) as:
     }
 
 define buffer_add(buf, obs, action, reward, next_obs, done) as:
+    # v0.48.0 lets buffer_sample's local `obs` overwrite the caller's `obs`.
+    # After sampling starts that binding is the one-element replay list, so
+    # recover its buffer before reading it (upstream report: Tidepool #80).
     if (type of obs) != "buffer":
         obs is obs[0]
-    if (type of next_obs) != "buffer":
-        next_obs is next_obs[0]
     slot is buf.pos
     base is slot * NEURAL_INPUT_SIZE
     for j in range of NEURAL_INPUT_SIZE:
-        buf.obs[base + j] is buf_get of [obs, j]
-        buf.next_obs[base + j] is buf_get of [next_obs, j]
+        buf.obs[base + j] is obs[j]
+        buf.next_obs[base + j] is next_obs[j]
     if buf.size < buf.capacity:
         append of [buf.actions, action]
         append of [buf.rewards, reward]
@@ -191,10 +183,10 @@ define buffer_sample(buf, batch_size) as:
         for j in range of NEURAL_INPUT_SIZE:
             row[j] is buf.obs[base + j]
             next_row[j] is buf.next_obs[base + j]
-        append_buffer of [obs, row]
+        append of [obs, row]
         append of [actions, buf.actions[idx]]
         append of [rewards, buf.rewards[idx]]
-        append_buffer of [next_obs, next_row]
+        append of [next_obs, next_row]
         append of [dones, buf.dones[idx]]
     return [obs, actions, rewards, next_obs, dones]
 

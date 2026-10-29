@@ -401,8 +401,6 @@ define new_observation_stack() as:
     return {"frames": buffer of (NEURAL_STACK_FRAMES * NEURAL_OBS_SIZE), "count": 0}
 
 define push_observation(stack, obs) as:
-    if (type of obs) != "buffer":
-        obs is obs[0]
     if stack.count < NEURAL_STACK_FRAMES:
         dst is stack.count * NEURAL_OBS_SIZE
         stack.count is stack.count + 1
