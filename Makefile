@@ -42,6 +42,7 @@ test: | $(EIG)
 	  if printf '%s' "$$out" | grep -q "$$2"; then echo "  ok: $$1"; \
 	  else echo "  FAIL: $$1"; printf '%s\n' "$$out" | tail -3; fail=1; fi; }; \
 	check test_regressions.eigs "All regressions passed"; \
+	rm -rf saves; check test_atomic_save.eigs "All atomic save tests passed"; rm -rf saves; \
 	check test_obs_stack.eigs   "All observation stacking tests passed"; \
 	check test_game.eigs        "Test complete"; \
 	check test_pacing.eigs      "All pacing tests passed"; \

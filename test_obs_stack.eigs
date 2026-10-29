@@ -1,4 +1,5 @@
 load_file of "src/game.eigs"
+load_file of "src/persistence.eigs"
 load_file of "src/neural.eigs"
 
 print of "=== Observation stacking tests ==="

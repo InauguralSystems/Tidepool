@@ -1,0 +1,21 @@
+load_file of "src/persistence.eigs"
+
+mkdir of "saves"
+write_text of ["saves/high_score.txt", "41"]
+
+# Plant an interruption after the replacement has been fully staged, but before
+# it is renamed over the live score file.
+atomic_write_interrupt_after_tmp is 1
+result is save_high_score of 99
+
+if result != 41:
+    print of "FAIL: interrupted save reported an uncommitted score"
+    exit of 1
+if (read_text of "saves/high_score.txt") != "41":
+    print of "FAIL: interrupted save damaged the previous score"
+    exit of 1
+if (read_text of "saves/high_score.txt.tmp") != "99":
+    print of "FAIL: interruption did not happen after staging the new score"
+    exit of 1
+
+print of "All atomic save tests passed"
