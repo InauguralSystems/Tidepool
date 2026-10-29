@@ -15,7 +15,7 @@ for i in range of 3:
     obs is build_observation of game
     push_observation of [stack, obs]
 assert of [stack.count == 3, "count is 3 after 3 pushes"]
-assert of [(len of stack.frames) == 3, "3 frames stored"]
+assert of [(len of stack.frames) == (NEURAL_STACK_FRAMES * NEURAL_OBS_SIZE), "flat frame storage has fixed capacity"]
 print of "  push 3 frames: ok"
 
 # Test 3: Build stacked obs with fewer than 4 frames (right-aligned, left zero-padded)
@@ -50,7 +50,7 @@ game_tick of game
 obs is build_observation of game
 push_observation of [stack, obs]
 assert of [stack.count == 4, "count stays 4 after overflow"]
-assert of [(len of stack.frames) == 4, "frames list stays 4"]
+assert of [(len of stack.frames) == (NEURAL_STACK_FRAMES * NEURAL_OBS_SIZE), "flat frame storage stays fixed"]
 print of "  sliding window: ok"
 
 # Test 6: Aux features are populated

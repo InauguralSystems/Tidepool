@@ -1,0 +1,1 @@
+- Training now reads replay observations as numeric buffer elements and CI exercises real optimizer steps (#80).

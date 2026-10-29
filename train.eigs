@@ -28,7 +28,8 @@ define parse_train_args() as:
         "target_update": 100,
         "tick_limit": 1000,
         "resume": 0,
-        "eps_start_override": -1.0
+        "eps_start_override": -1.0,
+        "training_check": 0
     }
     i is 0
     loop while i < (len of argv):
@@ -62,6 +63,8 @@ define parse_train_args() as:
                 result.target_update is floor of (num of argv[i])
         elif argv[i] == "--resume":
             result.resume is 1
+        elif argv[i] == "--training-check":
+            result.training_check is 1
         elif argv[i] == "--eps-start":
             if i + 1 < (len of argv):
                 i is i + 1
@@ -134,10 +137,10 @@ define add_bias(pre, bias, rows, cols) as:
 
 define new_buffer(capacity) as:
     return {
-        "obs": [],
+        "obs": buffer of (capacity * NEURAL_INPUT_SIZE),
         "actions": [],
         "rewards": [],
-        "next_obs": [],
+        "next_obs": buffer of (capacity * NEURAL_INPUT_SIZE),
         "dones": [],
         "capacity": capacity,
         "pos": 0,
@@ -145,33 +148,42 @@ define new_buffer(capacity) as:
     }
 
 define buffer_add(buf, obs, action, reward, next_obs, done) as:
+    slot is buf.pos
+    base is slot * NEURAL_INPUT_SIZE
+    for j in range of NEURAL_INPUT_SIZE:
+        buf.obs[base + j] is obs[j]
+        buf.next_obs[base + j] is next_obs[j]
     if buf.size < buf.capacity:
-        append of [buf.obs, obs]
         append of [buf.actions, action]
         append of [buf.rewards, reward]
-        append of [buf.next_obs, next_obs]
         append of [buf.dones, done]
         buf.size is buf.size + 1
     else:
-        buf.obs[buf.pos] is obs
-        buf.actions[buf.pos] is action
-        buf.rewards[buf.pos] is reward
-        buf.next_obs[buf.pos] is next_obs
-        buf.dones[buf.pos] is done
+        buf.actions[slot] is action
+        buf.rewards[slot] is reward
+        buf.dones[slot] is done
     buf.pos is (buf.pos + 1) % buf.capacity
 
 define buffer_sample(buf, batch_size) as:
-    obs is []
-    actions is []
-    rewards is []
-    next_obs is []
-    dones is []
+    # `local` throughout: assignment is outward-mutable (SPEC "Assignment"), so a
+    # bare `obs is []` here rebinds the training loop's own `obs` buffer (#80).
+    local obs is []
+    local actions is []
+    local rewards is []
+    local next_obs is []
+    local dones is []
     for i in range of batch_size:
-        idx is random_int of [0, buf.size - 1]
-        append of [obs, buf.obs[idx]]
+        local idx is random_int of [0, buf.size - 1]
+        local row is buffer of NEURAL_INPUT_SIZE
+        local next_row is buffer of NEURAL_INPUT_SIZE
+        local base is idx * NEURAL_INPUT_SIZE
+        for j in range of NEURAL_INPUT_SIZE:
+            row[j] is buf.obs[base + j]
+            next_row[j] is buf.next_obs[base + j]
+        append of [obs, row]
         append of [actions, buf.actions[idx]]
         append of [rewards, buf.rewards[idx]]
-        append of [next_obs, buf.next_obs[idx]]
+        append of [next_obs, next_row]
         append of [dones, buf.dones[idx]]
     return [obs, actions, rewards, next_obs, dones]
 
@@ -188,7 +200,7 @@ define forward_stacked(policy, x, bs) as:
     a1 is relu of z1
     z2 is add_bias of [(matmul of [a1, policy.w2]), policy.b2, bs, NEURAL_HIDDEN2]
     a2 is relu of z2
-    q is add_bias of [(matmul of [a2, policy.w3]), policy.b3, bs, NEURAL_ACTIONS]
+    local q is add_bias of [(matmul of [a2, policy.w3]), policy.b3, bs, NEURAL_ACTIONS]
     return q
 
 define forward_cached(policy, obs_batch) as:
@@ -200,7 +212,7 @@ define forward_cached(policy, obs_batch) as:
     a1 is relu of z1
     z2 is add_bias of [(matmul of [a1, policy.w2]), policy.b2, bs, NEURAL_HIDDEN2]
     a2 is relu of z2
-    q is add_bias of [(matmul of [a2, policy.w3]), policy.b3, bs, NEURAL_ACTIONS]
+    local q is add_bias of [(matmul of [a2, policy.w3]), policy.b3, bs, NEURAL_ACTIONS]
     return [q, [x, z1, a1, z2, a2]]
 
 # ============================================================
@@ -211,12 +223,14 @@ define train_step(online, target, buf, hp) as:
     if buf.size < hp.batch_size:
         return [-1.0, 0.0]
 
-    sample is buffer_sample of [buf, hp.batch_size]
-    obs is sample[0]
-    actions is sample[1]
-    rewards is sample[2]
-    next_obs is sample[3]
-    dones is sample[4]
+    # `local`: these names are also the training loop's own bindings, and
+    # assignment is outward-mutable, so a bare `obs is` here would rebind it (#80).
+    local sample is buffer_sample of [buf, hp.batch_size]
+    local obs is sample[0]
+    local actions is sample[1]
+    local rewards is sample[2]
+    local next_obs is sample[3]
+    local dones is sample[4]
 
     # Forward on online network
     result is forward_cached of [online, obs]
@@ -476,6 +490,9 @@ print of f"Buffer: {hp.buffer_size}, Target update: {hp.target_update}"
 print of "---"
 
 online is new_policy of null
+initial_weight is online.w3[0]
+first_check_loss is -1.0
+last_check_loss is -1.0
 if hp.resume == 1:
     loaded is load_policy of null
     if loaded != null:
@@ -500,6 +517,7 @@ recent_tiers is []
 loss_sum is 0.0
 q_sum is 0.0
 train_step_count is 0
+total_train_steps is 0
 
 LOG_PATH is "models/train_log.csv"
 STATE_PATH is "models/train_state.txt"
@@ -595,8 +613,12 @@ for ep in range of hp.episodes:
             step_out is train_step of [online, target_net, buf, hp]
             if step_out[0] >= 0.0:
                 loss_sum is loss_sum + step_out[0]
+                if first_check_loss < 0.0:
+                    first_check_loss is step_out[0]
+                last_check_loss is step_out[0]
                 q_sum is q_sum + step_out[1]
                 train_step_count is train_step_count + 1
+                total_train_steps is total_train_steps + 1
 
         # Update target network periodically
         if step_count % hp.target_update == 0:
@@ -681,3 +703,23 @@ if best_avg_score <= -9999.0:
 print of "---"
 print of f"Training complete. Best avg score: {best_avg_score}"
 print of f"Best policy saved to {POLICY_PATH}"
+
+# CI smoke contract: real optimizer work, finite loss, changed parameters, and
+# an improving fixed-seed run. Keep this after training so it checks production.
+if hp.training_check == 1:
+    check_ok is 1
+    if total_train_steps < 3:
+        print of f"FAIL: optimizer steps {total_train_steps} < 3"
+        check_ok is 0
+    if last_check_loss != last_check_loss or last_check_loss > 1000000000.0:
+        print of f"FAIL: non-finite loss {last_check_loss}"
+        check_ok is 0
+    if online.w3[0] == initial_weight:
+        print of "FAIL: weights did not change"
+        check_ok is 0
+    if last_check_loss >= first_check_loss:
+        print of f"FAIL: loss did not decrease ({first_check_loss} -> {last_check_loss})"
+        check_ok is 0
+    if check_ok == 0:
+        exit of 1
+    print of f"Training smoke passed: steps={total_train_steps} loss={first_check_loss}->{last_check_loss}"

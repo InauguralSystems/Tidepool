@@ -45,6 +45,11 @@ test: | $(EIG)
 	check test_obs_stack.eigs   "All observation stacking tests passed"; \
 	check test_game.eigs        "Test complete"; \
 	check test_pacing.eigs      "All pacing tests passed"; \
+	smoke=$$(mktemp -d); cp -r train.eigs src eigs.json "$$smoke"/ && mkdir -p "$$smoke/models"; \
+	out=$$(cd "$$smoke" && "$(abspath $(EIG))" train.eigs --training-check --episodes 1 --seed 80 --ticks 31 --batch 8 --buffer 128 </dev/null 2>&1); \
+	rm -rf "$$smoke"; \
+	if printf '%s' "$$out" | grep -q "Training smoke passed"; then echo "  ok: training smoke"; \
+	else echo "  FAIL: training smoke"; printf '%s\n' "$$out" | tail -8; fail=1; fi; \
 	if [ $$fail -eq 0 ]; then echo "all headless tests passed"; else exit 1; fi
 
 # Parse-check every source.
