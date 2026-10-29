@@ -19,6 +19,7 @@
 #   eigenscript tidepool.eigs --version
 
 load_file of "src/game.eigs"
+load_file of "src/persistence.eigs"
 load_file of "src/neural.eigs"
 load_file of "src/audio.eigs"
 
@@ -167,21 +168,6 @@ if neural != null:
 
 # High score
 high_score is 0
-
-define load_high_score() as:
-    if file_exists of "saves/high_score.txt":
-        text is read_text of "saves/high_score.txt"
-        if (len of text) > 0:
-            return num of text
-    return 0
-
-define save_high_score(score) as:
-    existing is load_high_score of null
-    if score > existing:
-        mkdir of "saves"
-        write_text of ["saves/high_score.txt", f"{score}"]
-        return score
-    return existing
 
 high_score is load_high_score of null
 

@@ -7,6 +7,7 @@
 #   eigenscript train.eigs --episodes 5000 --lr 0.001
 
 load_file of "src/game.eigs"
+load_file of "src/persistence.eigs"
 load_file of "src/neural.eigs"
 
 # ============================================================
@@ -679,8 +680,7 @@ for ep in range of hp.episodes:
         # Persist resumable training state (global episode + best bar),
         # crash-safe via tmp+rename, so --resume continues correctly.
         stxt is f"{gep}\n{best_avg_score}\n"
-        write_text of [f"{STATE_PATH}.tmp", stxt]
-        rename of [f"{STATE_PATH}.tmp", STATE_PATH]
+        atomic_write_text of [STATE_PATH, stxt]
 
         # Reset the block accumulators now that this 50-episode window is
         # logged, so the next row averages exactly the next 50 episodes.

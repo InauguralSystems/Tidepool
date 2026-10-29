@@ -1,0 +1,34 @@
+# ============================================================
+# Crash-safe persistent text files
+# ============================================================
+
+# Test seam: when set, leave the completed temporary file in place to model a
+# process stopping immediately before rename. Normal callers never change it.
+atomic_write_interrupt_after_tmp is 0
+
+define atomic_write_text(path, text) as:
+    tmp is f"{path}.tmp"
+    write_text of [tmp, text]
+    if atomic_write_interrupt_after_tmp == 1:
+        return 0
+    rename of [tmp, path]
+    return 1
+
+# ============================================================
+# High score
+# ============================================================
+
+define load_high_score() as:
+    if file_exists of "saves/high_score.txt":
+        text is read_text of "saves/high_score.txt"
+        if (len of text) > 0:
+            return num of text
+    return 0
+
+define save_high_score(score) as:
+    existing is load_high_score of null
+    if score > existing:
+        mkdir of "saves"
+        if (atomic_write_text of ["saves/high_score.txt", f"{score}"]) == 1:
+            return score
+    return existing

@@ -476,13 +476,7 @@ define save_policy(policy) as:
     for i in range of (len of flat):
         append of [parts, f"{flat[i]}"]
     text is join of [parts, "\n"]
-    # Crash-safe: write to a temp file then atomically rename over the target.
-    # A crash mid-write leaves the previous good checkpoint intact (rename is
-    # atomic on POSIX) instead of truncating models/policy.txt to garbage.
-    tmp is f"{POLICY_PATH}.tmp"
-    write_text of [tmp, text]
-    rename of [tmp, POLICY_PATH]
-    return 1
+    return atomic_write_text of [POLICY_PATH, text]
 
 define _unflatten_weights(flat) as:
     policy is new_policy of null

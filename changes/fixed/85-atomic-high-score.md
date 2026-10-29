@@ -1,0 +1,1 @@
+- High scores are saved atomically so an interrupted write preserves the previous score (#85).
