@@ -28,7 +28,8 @@ define parse_train_args() as:
         "target_update": 100,
         "tick_limit": 1000,
         "resume": 0,
-        "eps_start_override": -1.0
+        "eps_start_override": -1.0,
+        "training_check": 0
     }
     i is 0
     loop while i < (len of argv):
@@ -62,6 +63,8 @@ define parse_train_args() as:
                 result.target_update is floor of (num of argv[i])
         elif argv[i] == "--resume":
             result.resume is 1
+        elif argv[i] == "--training-check":
+            result.training_check is 1
         elif argv[i] == "--eps-start":
             if i + 1 < (len of argv):
                 i is i + 1
@@ -113,9 +116,11 @@ define stack_obs(obs_list) as:
     m is buffer of [bs, cols]
     for r in range of bs:
         row is obs_list[r]
+        if (type of row) != "buffer":
+            row is row[0]
         base is r * cols
         for c in range of cols:
-            m[base + c] is row[c]
+            m[base + c] is buf_get of [row, c]
     return m
 
 # z[r,c] = pre[r,c] + bias[c] — broadcast a 1-D bias over batch rows. The VM
@@ -132,12 +137,19 @@ define add_bias(pre, bias, rows, cols) as:
 # Replay buffer (circular)
 # ============================================================
 
+# `append of [list, buffer]` treats the buffer as append's argument envelope on
+# affected EigenScript releases. Grow the list with a scalar placeholder, then
+# assign the buffer as one element so replay remains a list of 1-D buffers.
+define append_buffer(lst, value) as:
+    append of [lst, 0]
+    lst[(len of lst) - 1] is value
+
 define new_buffer(capacity) as:
     return {
-        "obs": [],
+        "obs": buffer of (capacity * NEURAL_INPUT_SIZE),
         "actions": [],
         "rewards": [],
-        "next_obs": [],
+        "next_obs": buffer of (capacity * NEURAL_INPUT_SIZE),
         "dones": [],
         "capacity": capacity,
         "pos": 0,
@@ -145,19 +157,24 @@ define new_buffer(capacity) as:
     }
 
 define buffer_add(buf, obs, action, reward, next_obs, done) as:
+    if (type of obs) != "buffer":
+        obs is obs[0]
+    if (type of next_obs) != "buffer":
+        next_obs is next_obs[0]
+    slot is buf.pos
+    base is slot * NEURAL_INPUT_SIZE
+    for j in range of NEURAL_INPUT_SIZE:
+        buf.obs[base + j] is buf_get of [obs, j]
+        buf.next_obs[base + j] is buf_get of [next_obs, j]
     if buf.size < buf.capacity:
-        append of [buf.obs, obs]
         append of [buf.actions, action]
         append of [buf.rewards, reward]
-        append of [buf.next_obs, next_obs]
         append of [buf.dones, done]
         buf.size is buf.size + 1
     else:
-        buf.obs[buf.pos] is obs
-        buf.actions[buf.pos] is action
-        buf.rewards[buf.pos] is reward
-        buf.next_obs[buf.pos] is next_obs
-        buf.dones[buf.pos] is done
+        buf.actions[slot] is action
+        buf.rewards[slot] is reward
+        buf.dones[slot] is done
     buf.pos is (buf.pos + 1) % buf.capacity
 
 define buffer_sample(buf, batch_size) as:
@@ -168,10 +185,16 @@ define buffer_sample(buf, batch_size) as:
     dones is []
     for i in range of batch_size:
         idx is random_int of [0, buf.size - 1]
-        append of [obs, buf.obs[idx]]
+        row is buffer of NEURAL_INPUT_SIZE
+        next_row is buffer of NEURAL_INPUT_SIZE
+        base is idx * NEURAL_INPUT_SIZE
+        for j in range of NEURAL_INPUT_SIZE:
+            row[j] is buf.obs[base + j]
+            next_row[j] is buf.next_obs[base + j]
+        append_buffer of [obs, row]
         append of [actions, buf.actions[idx]]
         append of [rewards, buf.rewards[idx]]
-        append of [next_obs, buf.next_obs[idx]]
+        append_buffer of [next_obs, next_row]
         append of [dones, buf.dones[idx]]
     return [obs, actions, rewards, next_obs, dones]
 
@@ -476,6 +499,9 @@ print of f"Buffer: {hp.buffer_size}, Target update: {hp.target_update}"
 print of "---"
 
 online is new_policy of null
+initial_weight is online.w3[0]
+first_check_loss is -1.0
+last_check_loss is -1.0
 if hp.resume == 1:
     loaded is load_policy of null
     if loaded != null:
@@ -595,6 +621,9 @@ for ep in range of hp.episodes:
             step_out is train_step of [online, target_net, buf, hp]
             if step_out[0] >= 0.0:
                 loss_sum is loss_sum + step_out[0]
+                if first_check_loss < 0.0:
+                    first_check_loss is step_out[0]
+                last_check_loss is step_out[0]
                 q_sum is q_sum + step_out[1]
                 train_step_count is train_step_count + 1
 
@@ -681,3 +710,23 @@ if best_avg_score <= -9999.0:
 print of "---"
 print of f"Training complete. Best avg score: {best_avg_score}"
 print of f"Best policy saved to {POLICY_PATH}"
+
+# CI smoke contract: real optimizer work, finite loss, changed parameters, and
+# an improving fixed-seed run. Keep this after training so it checks production.
+if hp.training_check == 1:
+    check_ok is 1
+    if train_step_count < 3:
+        print of f"FAIL: optimizer steps {train_step_count} < 3"
+        check_ok is 0
+    if last_check_loss != last_check_loss or last_check_loss > 1000000000.0:
+        print of f"FAIL: non-finite loss {last_check_loss}"
+        check_ok is 0
+    if online.w3[0] == initial_weight:
+        print of "FAIL: weights did not change"
+        check_ok is 0
+    if last_check_loss >= first_check_loss:
+        print of f"FAIL: loss did not decrease ({first_check_loss} -> {last_check_loss})"
+        check_ok is 0
+    if check_ok == 0:
+        exit of 1
+    print of f"Training smoke passed: steps={train_step_count} loss={first_check_loss}->{last_check_loss}"

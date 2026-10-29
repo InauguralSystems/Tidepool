@@ -398,18 +398,20 @@ define build_observation(game) as:
 # early frames (fewer than 4) get zero-padded on the left.
 
 define new_observation_stack() as:
-    return {"frames": [], "count": 0}
+    return {"frames": buffer of (NEURAL_STACK_FRAMES * NEURAL_OBS_SIZE), "count": 0}
 
 define push_observation(stack, obs) as:
+    if (type of obs) != "buffer":
+        obs is obs[0]
     if stack.count < NEURAL_STACK_FRAMES:
-        # Still filling: append
-        append of [stack.frames, obs]
+        dst is stack.count * NEURAL_OBS_SIZE
         stack.count is stack.count + 1
     else:
-        # Full: shift left, replace last
-        for k in range of (NEURAL_STACK_FRAMES - 1):
-            stack.frames[k] is stack.frames[k + 1]
-        stack.frames[NEURAL_STACK_FRAMES - 1] is obs
+        for k in range of ((NEURAL_STACK_FRAMES - 1) * NEURAL_OBS_SIZE):
+            stack.frames[k] is stack.frames[k + NEURAL_OBS_SIZE]
+        dst is (NEURAL_STACK_FRAMES - 1) * NEURAL_OBS_SIZE
+    for k in range of NEURAL_OBS_SIZE:
+        stack.frames[dst + k] is obs[k]
 
 define build_stacked_observation(stack, game) as:
     total is NEURAL_INPUT_SIZE
@@ -423,9 +425,9 @@ define build_stacked_observation(stack, game) as:
 
     for f in range of present:
         dst_offset is (start_slot + f) * NEURAL_OBS_SIZE
-        frame is stack.frames[f]
+        src_offset is f * NEURAL_OBS_SIZE
         for k in range of NEURAL_OBS_SIZE:
-            result[dst_offset + k] is frame[k]
+            result[dst_offset + k] is stack.frames[src_offset + k]
 
     # Auxiliary temporal features (4 features after the stacked frames)
     aux_base is NEURAL_OBS_SIZE * NEURAL_STACK_FRAMES
