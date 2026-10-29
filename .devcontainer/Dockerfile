@@ -28,7 +28,7 @@ RUN apt-get update \
 # EIGS_REF is a tag/SHA (fetched directly, so it stays reproducible). The neural
 # policy's buffer path needs v0.19.0 or later for flat-buffer tensors (shaped
 # VAL_BUFFER, #275).
-ARG EIGS_REF=v0.47.0
+ARG EIGS_REF=v0.48.0
 RUN mkdir -p /opt/eigenscript && cd /opt/eigenscript && git init -q \
  && git remote add origin https://github.com/InauguralSystems/EigenScript.git \
  && git fetch -q --depth 1 origin "${EIGS_REF}" && git checkout -q FETCH_HEAD \
