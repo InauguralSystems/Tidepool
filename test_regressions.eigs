@@ -475,12 +475,18 @@ assert of [(check_button_click of [hit_root, 20, 15, "hit_btn"]) == 0, "panel of
 assert of [(check_button_click of [hit_root, 120, 115, "no_such_btn"]) == 0, "unknown id misses"]
 assert of [(check_button_click of [hit_root, 120, 129, "hit_btn"]) == 1, "last row is inside"]
 assert of [(check_button_click of [hit_root, 120, 130, "hit_btn"]) == 0, "bottom edge is outside"]
-# A root that is not at the origin, as the HUD's sits at the window's bottom.
+# Laid out like the HUD: the root is not at the origin (it sits at the
+# window's bottom), and the buttons are not its first child.
 off_root is ui.panel of ["off_root", 0, 500, 800, 100]
+ui.add_child of [off_root, (ui.label of ["off_lbl", 10, 10, "DNA"])]
 off_btn is ui.button of ["off_btn", 520, 45, 80, 22, "Spd", null]
 ui.add_child of [off_root, off_btn]
+off_btn2 is ui.button of ["off_btn2", 610, 45, 80, 22, "Sns", null]
+ui.add_child of [off_root, off_btn2]
 assert of [(check_button_click of [off_root, 530, 550, "off_btn"]) == 1, "the root's own position is applied"]
 assert of [(check_button_click of [off_root, 530, 50, "off_btn"]) == 0, "a click at the unshifted spot misses"]
+assert of [(check_button_click of [off_root, 620, 550, "off_btn2"]) == 1, "a later child is searched"]
+assert of [(check_button_click of [off_root, 530, 550, "off_btn2"]) == 0, "a click on its sibling misses it"]
 hit_btn.visible is not hit_btn.visible
 assert of [(check_button_click of [hit_root, 120, 115, "hit_btn"]) == 0, "hidden button misses"]
 print of "  check_button_click on a toolkit button: ok"
