@@ -475,6 +475,11 @@ live_hint is "Enter: play again   Esc: menu"
 assert of [go_hint_w != null, "the game-over overlay has its hint label"]
 assert of [(index_of of [go_hint_w.text, stale_hint]) < 0, "game-over hint no longer lists unhandled keys"]
 assert of [go_hint_w.text == live_hint, "game-over hint lists the real controls"]
+# The overlay is also rewritten at run time (update_gameover_overlay in
+# tidepool.eigs), so the source text of both files is checked as before.
+for hint_src_path in ["tidepool.eigs", "src/ui_overlays.eigs"]:
+    hint_src is read_text of hint_src_path
+    assert of [(index_of of [hint_src, stale_hint]) < 0, f"{hint_src_path} does not carry the stale game-over hint"]
 
 print of "  game-over hint text: ok"
 
