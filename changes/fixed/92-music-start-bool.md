@@ -1,0 +1,1 @@
+- Background music starts again on EigenScript v0.48.0: `audio_start_music` reads the bool from `audio_music_play` by truthiness instead of comparing it with 1, which raised (#92).

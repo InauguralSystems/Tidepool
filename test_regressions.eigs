@@ -444,6 +444,25 @@ eval of audio_source
 print of "  audio persistent channel lifecycle: ok"
 
 # ------------------------------------------------------------
+# Background music start (#92). `audio_music_play` returns a bool, and from
+# EigenScript v0.48.0 comparing a bool with 1 raises, so `ok == 1` in
+# audio_start_music took the error up to the game's start-up. Call the real
+# function; run under SDL_AUDIODRIVER=dummy, the builtin answers true.
+# ------------------------------------------------------------
+music_error is ""
+music_result is null
+try:
+    music_result is audio_start_music of null
+catch e:
+    music_error is f"{e.kind}: {e.message}"
+assert of [music_error == "", f"audio_start_music does not raise ({music_error})"]
+music_type is type of music_result
+assert of [music_type == "bool" or music_type == "num", f"audio_start_music returns the builtin's answer (got {music_type})"]
+audio_music_stop of null
+
+print of "  background music start: ok"
+
+# ------------------------------------------------------------
 # Game-over hint (#19) — the overlay must advertise only the keys the
 # game-over handler actually implements (Enter -> play again, Esc -> menu).
 # build_gameover_overlay lives in the gfx entry point, which can't load

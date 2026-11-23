@@ -21,10 +21,12 @@ _danger_channel is 0
 # builtins, separate from the SFX device). Device and asset failures are
 # reported by the builtin's false return. Only its real IO error is handled;
 # programmer errors retain their kind and propagate.
+# `audio_music_play` returns a bool, and since EigenScript v0.48.0 a bool
+# compared with a number raises, so the result is read by truthiness (#92).
 define audio_start_music() as:
     try:
         ok is audio_music_play of [MUSIC_PATH, 0 - 1]
-        if ok == 1:
+        if ok:
             audio_music_volume of MUSIC_VOLUME
         return ok
     catch e:
