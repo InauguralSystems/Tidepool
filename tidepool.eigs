@@ -125,6 +125,7 @@ if cli.demo >= 0:
 load_file of "src/renderer.eigs"
 load_file of "src/editor.eigs"
 import ui
+load_file of "src/ui_hit.eigs"
 
 WINDOW_W is 800
 WINDOW_H is 600
@@ -732,36 +733,6 @@ define draw_tutorial(game, screen_w) as:
         draw_text of [tx + 12, ty + 10, "WASD or Arrow keys to move", 180, 200, 220, 2]
         draw_text of [tx + 12, ty + 32, "Eat green food to survive", 120, 200, 120, 2]
         draw_text of [tx + 12, ty + 54, "Avoid red predators!", 200, 120, 120, 2]
-
-# ============================================================
-# Check for click hits on UI panels (manual dispatch for buttons)
-# ============================================================
-
-define check_button_click(root, mx, my, btn_id) as:
-    w is ui.find_by_id of [root, btn_id]
-    if w == null:
-        return 0
-    if w.visible == 0:
-        return 0
-    # Walk up to find absolute position — for simplicity assume
-    # buttons are nested one level deep inside a panel inside root.
-    # We use the panel parent's position offset.
-    # Actually, let's do a simple recursive hit test.
-    return _hit_test_btn of [root, 0, 0, mx, my, btn_id]
-
-define _hit_test_btn(widget, ox, oy, mx, my, btn_id) as:
-    ax is ox + widget.x
-    ay is oy + widget.y
-    if widget.id == btn_id:
-        if mx >= ax and mx < ax + widget.w and my >= ay and my < ay + widget.h:
-            return 1
-        return 0
-    if widget.type == "panel" or widget.type == "hbox" or widget.type == "vbox":
-        for i in range of (len of widget.children):
-            local result is _hit_test_btn of [widget.children[i], ax, ay, mx, my, btn_id]
-            if result == 1:
-                return 1
-    return 0
 
 # ============================================================
 # Main game loop

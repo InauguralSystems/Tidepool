@@ -7,6 +7,7 @@ load_file of "src/editor.eigs"
 load_file of "src/renderer.eigs"
 load_file of "src/audio.eigs"
 import ui
+load_file of "src/ui_hit.eigs"
 
 print of "=== Tidepool regressions ==="
 
@@ -455,6 +456,40 @@ assert of [(index_of of [tp_src, stale_hint]) < 0, "game-over hint no longer lis
 assert of [(index_of of [tp_src, live_hint]) >= 0, "game-over hint lists the real controls"]
 
 print of "  game-over hint text: ok"
+
+# ------------------------------------------------------------
+# check_button_click on a real toolkit button (EigenScript#1653):
+# it read `w.visible == 0`, which raises once the toolkit's flags are
+# bools. The read is truthiness now; this clicks through the same
+# path tidepool.eigs's mousedown handlers take.
+# ------------------------------------------------------------
+hit_root is ui.panel of ["hit_root", 0, 0, 800, 600]
+hit_panel is ui.panel of ["hit_panel", 100, 100, 200, 200]
+ui.add_child of [hit_root, hit_panel]
+hit_btn is ui.button of ["hit_btn", 10, 10, 50, 20, "Go", null]
+ui.add_child of [hit_panel, hit_btn]
+assert of [(check_button_click of [hit_root, 120, 115, "hit_btn"]) == 1, "click inside the button hits"]
+assert of [(check_button_click of [hit_root, 110, 110, "hit_btn"]) == 1, "top-left corner is inside"]
+assert of [(check_button_click of [hit_root, 160, 115, "hit_btn"]) == 0, "right edge is outside"]
+assert of [(check_button_click of [hit_root, 20, 15, "hit_btn"]) == 0, "panel offset is applied"]
+assert of [(check_button_click of [hit_root, 120, 115, "no_such_btn"]) == 0, "unknown id misses"]
+assert of [(check_button_click of [hit_root, 120, 129, "hit_btn"]) == 1, "last row is inside"]
+assert of [(check_button_click of [hit_root, 120, 130, "hit_btn"]) == 0, "bottom edge is outside"]
+# Laid out like the HUD: the root is not at the origin (it sits at the
+# window's bottom), and the buttons are not its first child.
+off_root is ui.panel of ["off_root", 0, 500, 800, 100]
+ui.add_child of [off_root, (ui.label of ["off_lbl", 10, 10, "DNA"])]
+off_btn is ui.button of ["off_btn", 520, 45, 80, 22, "Spd", null]
+ui.add_child of [off_root, off_btn]
+off_btn2 is ui.button of ["off_btn2", 610, 45, 80, 22, "Sns", null]
+ui.add_child of [off_root, off_btn2]
+assert of [(check_button_click of [off_root, 530, 550, "off_btn"]) == 1, "the root's own position is applied"]
+assert of [(check_button_click of [off_root, 530, 50, "off_btn"]) == 0, "a click at the unshifted spot misses"]
+assert of [(check_button_click of [off_root, 620, 550, "off_btn2"]) == 1, "a later child is searched"]
+assert of [(check_button_click of [off_root, 530, 550, "off_btn2"]) == 0, "a click on its sibling misses it"]
+hit_btn.visible is not hit_btn.visible
+assert of [(check_button_click of [hit_root, 120, 115, "hit_btn"]) == 0, "hidden button misses"]
+print of "  check_button_click on a toolkit button: ok"
 
 print of ""
 print of "=== All regressions passed ==="
