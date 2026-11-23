@@ -444,16 +444,42 @@ eval of audio_source
 print of "  audio persistent channel lifecycle: ok"
 
 # ------------------------------------------------------------
+# Background music start (#92). `audio_music_play` returns a bool, and from
+# EigenScript v0.48.0 comparing a bool with 1 raises, so `ok == 1` in
+# audio_start_music took the error up to the game's start-up. Call the real
+# function; run under SDL_AUDIODRIVER=dummy, the builtin answers true.
+# ------------------------------------------------------------
+music_error is ""
+music_result is null
+try:
+    music_result is audio_start_music of null
+catch e:
+    music_error is f"{e.kind}: {e.message}"
+assert of [music_error == "", f"audio_start_music does not raise ({music_error})"]
+music_type is type of music_result
+assert of [music_type == "bool" or music_type == "num", f"audio_start_music returns the builtin's answer (got {music_type})"]
+audio_music_stop of null
+
+print of "  background music start: ok"
+
+# ------------------------------------------------------------
 # Game-over hint (#19) — the overlay must advertise only the keys the
 # game-over handler actually implements (Enter -> play again, Esc -> menu).
-# build_gameover_overlay lives in the gfx entry point, which can't load
-# headless, so guard the source text itself.
+# build_gameover_overlay lives in src/ui_overlays.eigs (#93), so the test
+# reads the hint from the overlay the game builds.
 # ------------------------------------------------------------
-tp_src is read_text of "tidepool.eigs"
+load_file of "src/ui_overlays.eigs"
+go_hint_w is ui.find_by_id of [(build_gameover_overlay of [800, 600]), "go_hint"]
 stale_hint is "M to call mate  E to edit/evolve"
 live_hint is "Enter: play again   Esc: menu"
-assert of [(index_of of [tp_src, stale_hint]) < 0, "game-over hint no longer lists unhandled keys"]
-assert of [(index_of of [tp_src, live_hint]) >= 0, "game-over hint lists the real controls"]
+assert of [go_hint_w != null, "the game-over overlay has its hint label"]
+assert of [(index_of of [go_hint_w.text, stale_hint]) < 0, "game-over hint no longer lists unhandled keys"]
+assert of [go_hint_w.text == live_hint, "game-over hint lists the real controls"]
+# The overlay is also rewritten at run time (update_gameover_overlay in
+# tidepool.eigs), so the source text of both files is checked as before.
+for hint_src_path in ["tidepool.eigs", "src/ui_overlays.eigs"]:
+    hint_src is read_text of hint_src_path
+    assert of [(index_of of [hint_src, stale_hint]) < 0, f"{hint_src_path} does not carry the stale game-over hint"]
 
 print of "  game-over hint text: ok"
 
