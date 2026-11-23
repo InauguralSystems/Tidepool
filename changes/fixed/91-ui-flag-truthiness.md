@@ -1,0 +1,1 @@
+- Menu, pause, game-over, editor and HUD buttons keep working when the EigenScript UI toolkit switches its flags to true/false (EigenScript#1653, #91).
