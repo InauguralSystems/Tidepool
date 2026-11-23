@@ -62,7 +62,7 @@ path. These work from any directory:
 
 ```bash
 make build   # build the headless EigenScript binary (no SDL2 needed)
-make test    # headless suite (test_regressions, test_obs_stack, test_game, test_pacing)
+make test    # headless suite (test_regressions, test_ui_hit, test_obs_stack, test_game, test_pacing)
 make lint    # parse-check every .eigs source
 make gfx     # build the graphical (SDL2) binary
 make run     # play the game (needs gfx + a display)

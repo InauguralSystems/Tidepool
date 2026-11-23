@@ -1,0 +1,1 @@
+- The diet, pause, game-over and HUD widget builders moved from `tidepool.eigs` to `src/ui_overlays.eigs`, and `test_ui_hit.eigs` hit-tests every button of the five real screens and of 200 seeded random widget trees against a rectangle oracle (#93).

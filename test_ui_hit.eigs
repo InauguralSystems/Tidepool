@@ -1,0 +1,272 @@
+# check_button_click against the game's real widget trees and against
+# seeded random trees (#93). The oracle below is a rectangle test from each
+# button's absolute position, computed by its own walk over the tree; it calls
+# nothing in src/ui_hit.eigs.
+
+load_file of "src/game.eigs"
+load_file of "src/editor.eigs"
+load_file of "src/renderer.eigs"
+import ui
+load_file of "src/ui_hit.eigs"
+load_file of "src/ui_overlays.eigs"
+
+# t.checks counts every comparison; t.fails every one that disagreed (a raise
+# inside check_button_click counts as a failure and is named).
+t is {"checks": 0, "fails": 0, "shown": 0}
+
+define fail_row(name) as:
+    t.fails is t.fails + 1
+    if t.shown < 25:
+        print of f"  FAIL: {name}"
+        t.shown is t.shown + 1
+
+define expect(ok, name) as:
+    t.checks is t.checks + 1
+    if not ok:
+        fail_row of name
+
+# ------------------------------------------------------------
+# The oracle: every button with its absolute rectangle. The walk descends any
+# widget that has a children list, whatever its type.
+# ------------------------------------------------------------
+define oracle_buttons(widget, ox, oy, out) as:
+    local ax is ox + widget.x
+    local ay is oy + widget.y
+    if widget.type == "button":
+        append of [out, {"id": widget.id, "x": ax, "y": ay, "w": widget.w, "h": widget.h, "shown": not (not widget.visible)}]
+    if has_key of [widget, "children"]:
+        if widget.children != null:
+            for ci in range of (len of widget.children):
+                oracle_buttons of [widget.children[ci], ax, ay, out]
+    return out
+
+define oracle_hit(rects, btn_id, mx, my) as:
+    for ri in range of (len of rects):
+        local r is rects[ri]
+        if r.id == btn_id:
+            if not r.shown:
+                return 0
+            if mx >= r.x and mx < r.x + r.w and my >= r.y and my < r.y + r.h:
+                return 1
+            return 0
+    return 0
+
+# check_button_click with a raise turned into a value the oracle never gives.
+define click(root, mx, my, btn_id) as:
+    try:
+        return check_button_click of [root, mx, my, btn_id]
+    catch e:
+        return f"raised {e.kind}: {e.message}"
+
+define compare_hit(label, root, rects, mx, my, btn_id) as:
+    local got is click of [root, mx, my, btn_id]
+    local want is oracle_hit of [rects, btn_id, mx, my]
+    t.checks is t.checks + 1
+    if (type of got) != "num":
+        fail_row of f"{label} {btn_id} at ({mx},{my}): {got}"
+        return 0
+    if got != want:
+        fail_row of f"{label} {btn_id} at ({mx},{my}): got {got}, oracle {want}"
+        return 0
+    return 1
+
+# Centre, the four inside corners and the four points just outside each edge.
+define probe_points(r) as:
+    local cx is r.x + floor of (r.w / 2)
+    local cy is r.y + floor of (r.h / 2)
+    return [[cx, cy], [r.x, r.y], [r.x + r.w - 1, r.y], [r.x, r.y + r.h - 1], [r.x + r.w - 1, r.y + r.h - 1], [r.x - 1, cy], [r.x + r.w, cy], [cx, r.y - 1], [cx, r.y + r.h]]
+
+# ------------------------------------------------------------
+# Part 1: the game's five real roots
+# ------------------------------------------------------------
+tp_src is read_text of "tidepool.eigs"
+for line in ["WINDOW_W is 800", "WINDOW_H is 600", "diet_overlay is build_diet_overlay of [WINDOW_W, WINDOW_H]", "pause_overlay is build_pause_overlay of [WINDOW_W, WINDOW_H]", "gameover_overlay is build_gameover_overlay of [WINDOW_W, WINDOW_H]", "hud_panel is build_hud_panel of [WINDOW_W, WINDOW_H, HUD_HEIGHT]", "editor_open of [game.creature, WINDOW_W, WINDOW_H]"]:
+    expect of [(index_of of [tp_src, line]) >= 0, f"tidepool.eigs builds its roots with: {line}"]
+
+roots is {
+    "diet": build_diet_overlay of [800, 600],
+    "pause": build_pause_overlay of [800, 600],
+    "gameover": build_gameover_overlay of [800, 600],
+    "hud": build_hud_panel of [800, 600, HUD_HEIGHT],
+    "editor": build_editor_ui of [800, 600]
+}
+root_of_var is {"diet_overlay": "diet", "pause_overlay": "pause", "gameover_overlay": "gameover", "hud_panel": "hud", "_editor_root": "editor"}
+root_names is ["diet", "pause", "gameover", "hud", "editor"]
+
+# The buttons the game clicks, read from its call sites. A site this parser
+# does not know is a failure, never a skip.
+game_sites is []
+pieces is split of [tp_src, "check_button_click of ["]
+for k in range of ((len of pieces) - 1):
+    piece is pieces[k + 1]
+    site_args is split of [(substr of [piece, 0, (index_of of [piece, "]"])]), ", "]
+    if (len of site_args) != 4 or not (has_key of [root_of_var, site_args[0]]):
+        fail_row of f"unparsed check_button_click site: {site_args}"
+    elif site_args[1] != "mx" or site_args[2] != "my":
+        fail_row of f"unparsed check_button_click site: {site_args}"
+    elif site_args[3] == "f\"ed_part_{pi}\"":
+        expect of [(index_of of [tp_src, "for pi in range of 8:"]) >= 0, "the part buttons are clicked for pi in range of 8"]
+        for pi in range of 8:
+            append of [game_sites, f"{root_of_var[site_args[0]]}/ed_part_{pi}"]
+    elif (substr of [site_args[3], 0, 1]) == "\"":
+        append of [game_sites, f"{root_of_var[site_args[0]]}/{substr of [site_args[3], 1, (len of site_args[3]) - 2]}"]
+    else:
+        fail_row of f"unparsed check_button_click site: {site_args}"
+
+tree_sites is []
+real_buttons is 0
+real_outside is 0
+for rn in root_names:
+    root is roots[rn]
+    rects is oracle_buttons of [root, 0, 0, []]
+    for ri in range of (len of rects):
+        r is rects[ri]
+        append of [tree_sites, f"{rn}/{r.id}"]
+        real_buttons is real_buttons + 1
+        # The centre of every button hits.
+        cx is r.x + floor of (r.w / 2)
+        cy is r.y + floor of (r.h / 2)
+        got is click of [root, cx, cy, r.id]
+        expect of [(type of got) == "num", f"{rn} {r.id} centre ({cx},{cy}): {got}"]
+        if (type of got) == "num":
+            expect of [got == 1, f"{rn} {r.id} centre ({cx},{cy}) hits"]
+        pts is probe_points of r
+        for pi2 in range of (len of pts):
+            compare_hit of [rn, root, rects, pts[pi2][0], pts[pi2][1], r.id]
+    # A 20 px grid, offset so it is not aligned with the layouts, for every
+    # button: inside points hit and every point outside the button misses.
+    gy is 3
+    loop while gy < 600:
+        gx is 7
+        loop while gx < 800:
+            in_none is 1
+            for ri in range of (len of rects):
+                if (oracle_hit of [rects, rects[ri].id, gx, gy]) == 1:
+                    in_none is 0
+                compare_hit of [rn, root, rects, gx, gy, rects[ri].id]
+            real_outside is real_outside + in_none
+            gx is gx + 20
+        gy is gy + 20
+
+# Both directions: every button in the trees is one the game clicks, and every
+# button the game clicks is in its tree.
+sort of game_sites
+sort of tree_sites
+expect of [(len of tree_sites) == 21, f"the five roots hold 21 buttons (found {len of tree_sites})"]
+expect of [(len of game_sites) == (len of tree_sites), f"the game clicks {len of game_sites} buttons, the trees hold {len of tree_sites}"]
+if (len of game_sites) == (len of tree_sites):
+    for si in range of (len of game_sites):
+        expect of [game_sites[si] == tree_sites[si], f"game site {game_sites[si]} matches tree button {tree_sites[si]}"]
+expect of [real_outside > 0, "the grid has points outside every button"]
+print of f"  real roots: {real_buttons} buttons, {real_outside} grid points outside every button, {t.fails} failed"
+real_fails is t.fails
+
+# ------------------------------------------------------------
+# Part 2: seeded random trees
+# ------------------------------------------------------------
+LEAF_TYPES is ["label", "button", "separator", "progress_bar", "badge", "dropdown", "radio_group", "spinbox"]
+CONTAINER_TYPES is ["panel", "hbox", "vbox"]
+g is {"next": 0, "empty": 0, "panel_before": 0, "depth3": 0, "hidden": 0}
+seen_types is {}
+
+define gen_id(prefix) as:
+    g.next is g.next + 1
+    return f"{prefix}_{g.next}"
+
+define gen_leaf(kind) as:
+    local x is random_int of [0, 200]
+    local y is random_int of [0, 200]
+    if kind == "label":
+        return ui.label of [(gen_id of "lbl"), x, y, "text"]
+    if kind == "button":
+        local b is ui.button of [(gen_id of "btn"), x, y, (random_int of [4, 120]), (random_int of [4, 40]), "b", null]
+        if (random_int of [0, 9]) == 0:
+            b.visible is 0
+            g.hidden is g.hidden + 1
+        return b
+    if kind == "separator":
+        return ui.separator of [(gen_id of "sep"), x, y, (random_int of [10, 200]), (random_int of [0, 1])]
+    if kind == "progress_bar":
+        return ui.progress_bar of [(gen_id of "bar"), x, y, (random_int of [10, 200]), 0.5]
+    if kind == "badge":
+        return ui.badge of [(gen_id of "badge"), x, y, "badge", [60, 60, 90]]
+    if kind == "dropdown":
+        return ui.dropdown of [(gen_id of "dd"), x, y, 120, ["a", "b"], 0, null]
+    if kind == "radio_group":
+        return ui.radio_group of [(gen_id of "rg"), x, y, ["a", "b"], 0, null]
+    return ui.spinbox of [(gen_id of "sb"), x, y, 100, 1, 7, 3, 1, null]
+
+define gen_container(kind, depth) as:
+    local x is random_int of [0, 150]
+    local y is random_int of [0, 150]
+    local c is null
+    if kind == "hbox":
+        c is ui.hbox of [(gen_id of "hb"), x, y, 300, 200]
+    elif kind == "vbox":
+        c is ui.vbox of [(gen_id of "vb"), x, y, 300, 200]
+    else:
+        c is ui.panel of [(gen_id of "pn"), x, y, 300, 200]
+    if depth >= 3:
+        g.depth3 is g.depth3 + 1
+    local n is random_int of [0, 4]
+    if n == 0:
+        g.empty is g.empty + 1
+    local saw_panel is 0
+    for ci in range of n:
+        local child is null
+        if depth < 4 and (random_int of [0, 9]) < 4:
+            local ck is CONTAINER_TYPES[random_int of [0, 2]]
+            child is gen_container of [ck, depth + 1]
+            if ck == "panel":
+                saw_panel is 1
+        else:
+            # Buttons are drawn three times as often as each other leaf.
+            local pick is random_int of [0, 9]
+            local lk is "button"
+            if pick < 7:
+                lk is LEAF_TYPES[pick + 1]
+                if lk == "button":
+                    lk is "label"
+            child is gen_leaf of lk
+            seen_types[lk] is 1
+            if lk == "button" and saw_panel == 1:
+                g.panel_before is g.panel_before + 1
+        ui.add_child of [c, child]
+    return c
+
+TREES is 200
+trees_examined is 0
+gen_buttons is 0
+seed_random of 93
+for tree_i in range of TREES:
+    groot is gen_container of ["panel", 1]
+    groot.x is random_int of [0, 400]
+    groot.y is random_int of [0, 400]
+    grects is oracle_buttons of [groot, 0, 0, []]
+    for ri in range of (len of grects):
+        gr is grects[ri]
+        gen_buttons is gen_buttons + 1
+        gpts is probe_points of gr
+        for pi3 in range of (len of gpts):
+            compare_hit of [f"tree {tree_i}", groot, grects, gpts[pi3][0], gpts[pi3][1], gr.id]
+        # Random points anywhere near the tree.
+        for rp in range of 8:
+            compare_hit of [f"tree {tree_i}", groot, grects, (random_int of [0, 1000]), (random_int of [0, 1000]), gr.id]
+    compare_hit of [f"tree {tree_i}", groot, grects, 10, 10, "no_such_btn"]
+    trees_examined is trees_examined + 1
+
+expect of [trees_examined == TREES and TREES > 0, f"examined {trees_examined} of {TREES} trees"]
+expect of [gen_buttons > 0, "the trees hold buttons"]
+expect of [g.empty > 0, "the trees hold empty containers"]
+expect of [g.panel_before > 0, "the trees hold a panel ahead of a sibling button"]
+expect of [g.depth3 > 0, "the trees nest containers three deep"]
+expect of [g.hidden > 0, "the trees hold hidden buttons"]
+for lt in LEAF_TYPES:
+    expect of [has_key of [seen_types, lt], f"the trees hold a {lt}"]
+print of f"  random trees: {trees_examined} trees, {gen_buttons} buttons, {g.empty} empty containers, {g.panel_before} panels ahead of a button, {g.hidden} hidden, {t.fails - real_fails} failed"
+
+print of f"  ui hit checks: {t.checks}, failed: {t.fails}"
+if t.fails == 0 and t.checks > 0:
+    print of "All ui hit tests passed"
+else:
+    print of "UI HIT TESTS FAILED"

@@ -465,14 +465,16 @@ print of "  background music start: ok"
 # ------------------------------------------------------------
 # Game-over hint (#19) — the overlay must advertise only the keys the
 # game-over handler actually implements (Enter -> play again, Esc -> menu).
-# build_gameover_overlay lives in the gfx entry point, which can't load
-# headless, so guard the source text itself.
+# build_gameover_overlay lives in src/ui_overlays.eigs (#93), so the test
+# reads the hint from the overlay the game builds.
 # ------------------------------------------------------------
-tp_src is read_text of "tidepool.eigs"
+load_file of "src/ui_overlays.eigs"
+go_hint_w is ui.find_by_id of [(build_gameover_overlay of [800, 600]), "go_hint"]
 stale_hint is "M to call mate  E to edit/evolve"
 live_hint is "Enter: play again   Esc: menu"
-assert of [(index_of of [tp_src, stale_hint]) < 0, "game-over hint no longer lists unhandled keys"]
-assert of [(index_of of [tp_src, live_hint]) >= 0, "game-over hint lists the real controls"]
+assert of [go_hint_w != null, "the game-over overlay has its hint label"]
+assert of [(index_of of [go_hint_w.text, stale_hint]) < 0, "game-over hint no longer lists unhandled keys"]
+assert of [go_hint_w.text == live_hint, "game-over hint lists the real controls"]
 
 print of "  game-over hint text: ok"
 
